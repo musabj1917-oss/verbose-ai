@@ -75,13 +75,20 @@ VERIFIED BOOK EXCERPTS:
     }
 
     private function callGemini($systemPrompt, $userPrompt) {
-        $url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=" . urlencode($this->geminiApiKey);
-        $payload = [
-            'system_instruction' => ['parts' => [['text' => $systemPrompt]]],
-            'contents' => [['role' => 'user', 'parts' => [['text' => $userPrompt]]]],
-            'generationConfig' => ['temperature' => 0.2, 'maxOutputTokens' => 1024]
-        ];
-        return $this->httpPost($url, $payload, ['Content-Type: application/json']);
+        $models = ['gemini-2.5-flash-lite', 'gemini-flash-latest', 'gemini-3.8-flash', 'gemini-1.5-flash'];
+        foreach ($models as $model) {
+            $url = "https://generativelanguage.googleapis.com/v1beta/models/{$model}:generateContent?key=" . urlencode($this->geminiApiKey);
+            $payload = [
+                'system_instruction' => ['parts' => [['text' => $systemPrompt]]],
+                'contents' => [['role' => 'user', 'parts' => [['text' => $userPrompt]]]],
+                'generationConfig' => ['temperature' => 0.2, 'maxOutputTokens' => 1024]
+            ];
+            $res = $this->httpPost($url, $payload, ['Content-Type: application/json']);
+            if ($res['success']) {
+                return $res;
+            }
+        }
+        return ['success' => false, 'error' => 'All Gemini models attempted'];
     }
 
     private function callGrok($systemPrompt, $userPrompt) {

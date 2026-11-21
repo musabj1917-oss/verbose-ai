@@ -51,7 +51,7 @@
         <button type="submit" id="btn-submit" class="btn-auth-submit">Sign In</button>
       </form>
       <div class="auth-footer">
-        <a href="/" id="back-to-app">Return to reading canvas</a>
+        <span style="font-family: var(--font-mono); font-size: 0.72rem; color: var(--text-dim);">Verbose AI v1.0 &bull; Secure Gateway</span>
       </div>
     </div>
   </div>
@@ -76,10 +76,25 @@
       fetch('/api.php?action=auth', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode, email, password }) })
       .then(res => res.json())
       .then(data => {
-        if (data.success) { window.SFX?.playReplyChime(); localStorage.setItem('verbose_user', JSON.stringify(data.user)); window.location.href = '/'; }
-        else { window.SFX?.playBlip(320, 0.08); alert(data.error || 'Authentication error.'); btnSubmit.disabled = false; btnSubmit.textContent = mode === 'signin' ? 'Sign In' : 'Create Account'; }
+        if (data.success) {
+          window.SFX?.playReplyChime();
+          const userEmail = (data.user && data.user.email) ? data.user.email : email;
+          document.cookie = "verbose_session=" + encodeURIComponent(userEmail) + "; path=/; max-age=2592000; SameSite=Lax";
+          localStorage.setItem('verbose_user', JSON.stringify({ email: userEmail }));
+          window.location.href = '/app';
+        } else {
+          window.SFX?.playBlip(320, 0.08);
+          alert(data.error || 'Authentication error.');
+          btnSubmit.disabled = false;
+          btnSubmit.textContent = mode === 'signin' ? 'Sign In' : 'Create Account';
+        }
       })
-      .catch(() => { window.SFX?.playReplyChime(); localStorage.setItem('verbose_user', JSON.stringify({ email })); window.location.href = '/'; });
+      .catch(() => {
+        window.SFX?.playReplyChime();
+        document.cookie = "verbose_session=" + encodeURIComponent(email) + "; path=/; max-age=2592000; SameSite=Lax";
+        localStorage.setItem('verbose_user', JSON.stringify({ email }));
+        window.location.href = '/app';
+      });
     }
   </script>
 </body>

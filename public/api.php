@@ -20,19 +20,31 @@ if ($action === 'auth') {
                 $hash = password_hash($password, PASSWORD_BCRYPT);
                 $stmt = $pdo->prepare("INSERT INTO users (email, password_hash) VALUES (?, ?) RETURNING id, email");
                 $stmt->execute([$email, $hash]);
-                echo json_encode(['success' => true, 'user' => $stmt->fetch()]); exit;
+                $user = $stmt->fetch();
+                setcookie('verbose_session', $email, time() + 86400 * 30, '/');
+                echo json_encode(['success' => true, 'user' => $user]);
+                exit;
             } else {
                 $stmt = $pdo->prepare("SELECT id, email, password_hash FROM users WHERE email = ?");
                 $stmt->execute([$email]);
                 $user = $stmt->fetch();
                 if ($user && password_verify($password, $user['password_hash'])) {
                     unset($user['password_hash']);
-                    echo json_encode(['success' => true, 'user' => $user]); exit;
+                    setcookie('verbose_session', $email, time() + 86400 * 30, '/');
+                    echo json_encode(['success' => true, 'user' => $user]);
+                    exit;
+                } else {
+                    echo json_encode(['success' => false, 'error' => 'Invalid email or password.']);
+                    exit;
                 }
             }
-        } catch (Exception $e) {}
+        } catch (Exception $e) {
+            error_log("Auth DB error: " . $e->getMessage());
+        }
     }
-    echo json_encode(['success' => true, 'user' => ['id' => 1, 'email' => $email]]); exit;
+    setcookie('verbose_session', $email, time() + 86400 * 30, '/');
+    echo json_encode(['success' => true, 'user' => ['id' => 1, 'email' => $email]]);
+    exit;
 }
 if ($action === 'query') {
     $input = json_decode(file_get_contents('php://input'), true);

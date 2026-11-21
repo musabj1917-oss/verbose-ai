@@ -1,3 +1,10 @@
+<?php
+if (empty($_COOKIE['verbose_session'])) {
+    header('Location: /login');
+    exit;
+}
+$currentUser = htmlspecialchars($_COOKIE['verbose_session'] ?? 'Reader');
+?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -26,8 +33,10 @@
     <div id="chat-history-list" class="chat-history-list"></div>
 
     <div class="sidebar-bottom">
-      <a href="/login" style="color: var(--text-muted); text-decoration: none; transition: color 0.15s ease;" onmouseover="this.style.color='#fff'" onmouseout="this.style.color='var(--text-muted)'">Sign In</a>
-      <span>V1 RAG</span>
+      <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+        <span style="font-family: var(--font-mono); font-size: 0.72rem; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 130px;"><?= $currentUser ?></span>
+        <a href="/logout" id="btn-logout" style="color: var(--text-dim); font-size: 0.72rem; text-decoration: none; transition: color 0.15s ease;" onmouseover="this.style.color='#fff'" onmouseout="this.style.color='var(--text-dim)'">Sign Out</a>
+      </div>
     </div>
   </aside>
 
