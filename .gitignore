@@ -1,0 +1,4 @@
+.env
+vendor/
+thinking-orbs-src/
+*.log
