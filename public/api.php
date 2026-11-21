@@ -187,6 +187,30 @@ if ($action === 'auth') {
     echo json_encode(['success' => true, 'user' => ['id' => 1, 'email' => $email]]);
     exit;
 }
+if ($action === 'delete_book') {
+    $rawInput = file_get_contents('php://input');
+    $input = json_decode($rawInput, true);
+    $bookId = $input['book_id'] ?? null;
+    if (!$bookId) {
+        echo json_encode(['success' => false, 'error' => 'Book ID required.']);
+        exit;
+    }
+    $pdo = Database::getConnection();
+    if ($pdo) {
+        try {
+            $stmt = $pdo->prepare("DELETE FROM books WHERE id = ?");
+            $stmt->execute([$bookId]);
+            echo json_encode(['success' => true]);
+            exit;
+        } catch (Exception $e) {
+            echo json_encode(['success' => false, 'error' => $e->getMessage()]);
+            exit;
+        }
+    }
+    echo json_encode(['success' => false, 'error' => 'Database unreachable.']);
+    exit;
+}
+
 if ($action === 'query') {
     $input = json_decode(file_get_contents('php://input'), true);
     $bookId = $input['book_id'] ?? null;
@@ -198,6 +222,30 @@ if ($action === 'query') {
     $bookTitle = $activeBook['title'] ?? 'Selected Book';
     $citations = $bookService->getGroundedChunks($bookId, $query);
     $result = $aiService->generateGroundedAnswer($query, $bookTitle, $citations, $mode);
-    echo json_encode(['success' => $result['success'] ?? true, 'answer' => $result['answer'] ?? '', 'provider' => $result['provider'] ?? 'Google AI Studio', 'citations' => $citations]); exit;
+
+    // Extract external website references from answer
+    preg_match_all('/https?:\/\/[^\s\)\],"\']+/', $result['answer'] ?? '', $urlMatches);
+    $externalSources = [];
+    if (!empty($urlMatches[0])) {
+        foreach (array_unique($urlMatches[0]) as $url) {
+            $parsedHost = parse_url($url, PHP_URL_HOST);
+            $cleanHost = preg_replace('/^www\./', '', $parsedHost ?: 'reference');
+            $externalSources[] = [
+                'type' => 'website',
+                'url' => $url,
+                'host' => $cleanHost,
+                'title' => ucwords(str_replace(['.org', '.edu', '.com', '.net'], '', $cleanHost))
+            ];
+        }
+    }
+
+    echo json_encode([
+        'success' => $result['success'] ?? true,
+        'answer' => $result['answer'] ?? '',
+        'provider' => $result['provider'] ?? 'Google AI Studio',
+        'citations' => $citations,
+        'external_sources' => $externalSources
+    ]);
+    exit;
 }
 echo json_encode(['success' => false, 'error' => 'Invalid action.']);

@@ -282,7 +282,7 @@ document.addEventListener('DOMContentLoaded', () => {
     } else {
       emptyGreeting.style.display = 'none';
       session.messages.forEach(m => {
-        renderMessageItem(m.role, m.content, m.citations, m.bookTitle);
+        renderMessageItem(m.role, m.content, m.citations, m.bookTitle, m.external_sources);
       });
       scrollCanvasToBottom();
     }
@@ -405,15 +405,19 @@ document.addEventListener('DOMContentLoaded', () => {
       const answerText = data.answer || 'No answer generated.';
       aiBubble.innerHTML = formatMarkdown(answerText);
 
-      if (data.citations && data.citations.length) {
-        const tray = createSourcesTray(data.citations);
-        aiRow.appendChild(tray);
+      const hasCitations = data.citations && data.citations.length > 0;
+      const hasExternal = data.external_sources && data.external_sources.length > 0;
+
+      if (hasCitations || hasExternal) {
+        const tray = createSourcesTray(data.citations, data.external_sources);
+        if (tray) aiRow.appendChild(tray);
       }
 
       session.messages.push({
         role: 'ai',
         content: answerText,
-        citations: data.citations || []
+        citations: data.citations || [],
+        external_sources: data.external_sources || []
       });
       saveSessions();
 
@@ -429,7 +433,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // 9. UI Rendering Helpers
-  function renderMessageItem(role, content, citations, bookTitle) {
+  function renderMessageItem(role, content, citations, bookTitle, externalSources) {
     const row = document.createElement('div');
     row.className = `msg-row ${role}`;
 
@@ -448,41 +452,94 @@ document.addEventListener('DOMContentLoaded', () => {
       bubble.innerHTML = formatMarkdown(content);
       row.appendChild(bubble);
 
-      if (citations && citations.length) {
-        row.appendChild(createSourcesTray(citations));
+      const hasCitations = citations && citations.length > 0;
+      const hasExternal = externalSources && externalSources.length > 0;
+      if (hasCitations || hasExternal) {
+        const tray = createSourcesTray(citations, externalSources);
+        if (tray) row.appendChild(tray);
       }
     }
 
     messagesContainer.appendChild(row);
   }
 
-  function createSourcesTray(citations) {
+  function createSourcesTray(citations, externalSources) {
+    const validCitations = Array.isArray(citations) ? citations : [];
+    const validExternal = Array.isArray(externalSources) ? externalSources : [];
+
+    if (validCitations.length === 0 && validExternal.length === 0) return null;
+
     const tray = document.createElement('div');
     tray.className = 'sources-tray';
 
     const header = document.createElement('div');
     header.className = 'sources-tray-header';
+    const excerptCount = validCitations.length > 0 ? `${validCitations.length} Book Passage${validCitations.length > 1 ? 's' : ''}` : '';
+    const extCount = validExternal.length > 0 ? `${validExternal.length} External Source${validExternal.length > 1 ? 's' : ''}` : '';
+    const labelParts = [excerptCount, extCount].filter(Boolean).join(' &bull; ');
+
     header.innerHTML = `
-      <span>Verified Sources (${citations.length} passages)</span>
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
+          <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
+        </svg>
+        <span>Verified Sources &amp; Citations (${labelParts})</span>
+      </div>
       <span class="sources-arrow">&#9662;</span>
     `;
 
     const body = document.createElement('div');
     body.className = 'sources-tray-body';
 
-    citations.forEach((c, idx) => {
-      const card = document.createElement('div');
-      card.className = 'source-excerpt-card';
-      const sim = Math.round((c.similarity || 0.94) * 100);
-      card.innerHTML = `
-        <div class="source-excerpt-header">
-          <span>Passage ${idx + 1} &mdash; ${escapeHtml(c.chapter || 'Excerpt')}</span>
-          <span class="source-similarity">${sim}% Match</span>
-        </div>
-        <div class="source-excerpt-quote">"${escapeHtml(c.text)}"</div>
-      `;
-      body.appendChild(card);
-    });
+    if (validCitations.length > 0) {
+      const secTitle = document.createElement('div');
+      secTitle.className = 'sources-section-title';
+      secTitle.textContent = 'VERIFIED BOOK PASSAGES';
+      body.appendChild(secTitle);
+
+      validCitations.forEach((c, idx) => {
+        const card = document.createElement('div');
+        card.className = 'source-excerpt-card';
+        const sim = Math.round((c.similarity || 0.94) * 100);
+        card.innerHTML = `
+          <div class="source-excerpt-header">
+            <span>Passage ${idx + 1} &mdash; ${escapeHtml(c.chapter || 'Excerpt')}</span>
+            <span class="source-similarity">${sim}% Match</span>
+          </div>
+          <div class="source-excerpt-quote">"${escapeHtml(c.text)}"</div>
+        `;
+        body.appendChild(card);
+      });
+    }
+
+    if (validExternal.length > 0) {
+      const secTitle = document.createElement('div');
+      secTitle.className = 'sources-section-title';
+      secTitle.style.marginTop = validCitations.length > 0 ? '12px' : '0';
+      secTitle.textContent = 'EXTERNAL WEB CONTEXT SOURCES';
+      body.appendChild(secTitle);
+
+      validExternal.forEach((s) => {
+        const card = document.createElement('a');
+        card.className = 'source-external-card';
+        card.href = s.url;
+        card.target = '_blank';
+        card.rel = 'noopener noreferrer';
+        card.innerHTML = `
+          <div class="source-external-header">
+            <span>${escapeHtml(s.title || s.host || 'External Reference')}</span>
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+              <polyline points="15 3 21 3 21 9"></polyline>
+              <line x1="10" y1="14" x2="21" y2="3"></line>
+            </svg>
+          </div>
+          <span class="source-external-url">${escapeHtml(s.url)}</span>
+        `;
+        body.appendChild(card);
+      });
+    }
 
     header.addEventListener('click', () => {
       window.SFX?.playBlip(750, 0.03);
@@ -499,9 +556,11 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function formatMarkdown(text) {
+    if (!text) return '';
     return escapeHtml(text)
       .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
       .replace(/\*(.*?)\*/g, '<em>$1</em>')
+      .replace(/\[(.*?)\]\((https?:\/\/[^\s\)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer" class="chat-external-link">$1 <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline-block;vertical-align:middle;margin-left:2px;"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg></a>')
       .replace(/\n\n/g, '</p><p>')
       .replace(/\n/g, '<br>');
   }
@@ -515,194 +574,6 @@ document.addEventListener('DOMContentLoaded', () => {
       .replace(/"/g, '&quot;')
       .replace(/'/g, '&#039;');
   }
-
-  // 10. Book & PDF Ingestion Modal Management
-  const ingestModal = document.getElementById('ingest-modal');
-  const btnCloseIngest = document.getElementById('btn-close-ingest');
-  const btnCancelIngest = document.getElementById('btn-cancel-ingest');
-  const btnPopoverAddBook = document.getElementById('btn-popover-add-book');
-  const btnSettingsAddBook = document.getElementById('btn-settings-add-book');
-  const btnSidebarIngest = document.getElementById('btn-sidebar-ingest');
-  const ingestForm = document.getElementById('ingest-form');
-  const ingestTitle = document.getElementById('ingest-title');
-  const ingestAuthor = document.getElementById('ingest-author');
-  const ingestContent = document.getElementById('ingest-content');
-  const btnSubmitIngest = document.getElementById('btn-submit-ingest');
-
-  // PDF Dropzone elements
-  const pdfDropZone = document.getElementById('pdf-drop-zone');
-  const ingestFileInput = document.getElementById('ingest-file-input');
-  const pdfStatus = document.getElementById('pdf-status');
-  const pdfDropLabel = document.getElementById('pdf-drop-label');
-
-  function openIngestModal() {
-    window.SFX?.playBlip(720, 0.04);
-    closePopover();
-    if (settingsModal) settingsModal.classList.remove('open');
-    if (ingestModal) ingestModal.classList.add('open');
-  }
-
-  function closeIngestModal() {
-    window.SFX?.playBlip(480, 0.03);
-    if (ingestModal) ingestModal.classList.remove('open');
-  }
-
-  btnPopoverAddBook?.addEventListener('click', openIngestModal);
-  btnSettingsAddBook?.addEventListener('click', openIngestModal);
-  btnSidebarIngest?.addEventListener('click', openIngestModal);
-  btnCloseIngest?.addEventListener('click', closeIngestModal);
-  btnCancelIngest?.addEventListener('click', closeIngestModal);
-
-  // PDF & File Drag-and-Drop / Selection
-  pdfDropZone?.addEventListener('click', () => {
-    ingestFileInput?.click();
-  });
-
-  ['dragenter', 'dragover'].forEach(eventName => {
-    pdfDropZone?.addEventListener(eventName, (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      pdfDropZone.style.borderColor = '#ffffff';
-      pdfDropZone.style.background = 'rgba(255, 255, 255, 0.08)';
-    });
-  });
-
-  ['dragleave', 'drop'].forEach(eventName => {
-    pdfDropZone?.addEventListener(eventName, (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      pdfDropZone.style.borderColor = 'var(--border-medium)';
-      pdfDropZone.style.background = 'var(--bg-hover)';
-    });
-  });
-
-  pdfDropZone?.addEventListener('drop', (e) => {
-    const files = e.dataTransfer?.files;
-    if (files && files.length > 0) {
-      handleFileSelected(files[0]);
-    }
-  });
-
-  ingestFileInput?.addEventListener('change', (e) => {
-    const files = e.target.files;
-    if (files && files.length > 0) {
-      handleFileSelected(files[0]);
-    }
-  });
-
-  async function handleFileSelected(file) {
-    if (!file) return;
-    window.SFX?.playBlip(750, 0.04);
-
-    // Auto-populate Title if empty
-    const cleanTitle = file.name.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ');
-    if (ingestTitle && !ingestTitle.value.trim()) {
-      ingestTitle.value = cleanTitle.charAt(0).toUpperCase() + cleanTitle.slice(1);
-    }
-
-    if (file.name.toLowerCase().endsWith('.pdf')) {
-      await extractTextFromPdf(file);
-    } else {
-      // Plain text or markdown
-      const reader = new FileReader();
-      reader.onload = () => {
-        if (ingestContent) ingestContent.value = reader.result;
-        if (pdfStatus) {
-          pdfStatus.style.display = 'block';
-          pdfStatus.textContent = `Loaded text file: ${file.name} (${Math.round(file.size / 1024)} KB)`;
-        }
-      };
-      reader.readAsText(file);
-    }
-  }
-
-  async function extractTextFromPdf(file) {
-    if (!pdfStatus) return;
-    pdfStatus.style.display = 'block';
-    pdfStatus.textContent = 'Reading PDF structure...';
-
-    try {
-      if (!window.pdfjsLib) {
-        throw new Error('PDF parser engine is initializing. Please try again in a moment.');
-      }
-      const arrayBuffer = await file.arrayBuffer();
-      const loadingTask = window.pdfjsLib.getDocument({ data: arrayBuffer });
-      const pdf = await loadingTask.promise;
-      const numPages = pdf.numPages;
-
-      let fullText = '';
-      for (let pageNum = 1; pageNum <= numPages; pageNum++) {
-        pdfStatus.textContent = `Extracting text: Page ${pageNum} of ${numPages}...`;
-        const page = await pdf.getPage(pageNum);
-        const textContent = await page.getTextContent();
-        const pageText = textContent.items.map(item => item.str).join(' ');
-        fullText += `\n\n[Page ${pageNum}]\n` + pageText;
-      }
-
-      if (ingestContent) {
-        ingestContent.value = fullText.trim();
-      }
-
-      const wordCount = fullText.split(/\s+/).filter(Boolean).length;
-      pdfStatus.textContent = `Extracted ${numPages} pages from ${file.name} (~${wordCount} words ready to ingest)`;
-      window.SFX?.playReplyChime();
-    } catch (err) {
-      pdfStatus.textContent = 'Error parsing PDF: ' + err.message;
-      window.SFX?.playBlip(300, 0.08);
-    }
-  }
-
-  window.handleIngestBook = async function() {
-    const title = ingestTitle?.value.trim();
-    const author = ingestAuthor?.value.trim() || 'Unknown';
-    const content = ingestContent?.value.trim();
-
-    if (!title || !content) return;
-
-    window.SFX?.playSend();
-    if (btnSubmitIngest) {
-      btnSubmitIngest.disabled = true;
-      btnSubmitIngest.textContent = 'Ingesting Chunks...';
-    }
-
-    try {
-      const res = await fetch('/api.php?action=ingest_book', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title, author, content })
-      });
-      const data = await res.json();
-
-      if (data.success) {
-        window.SFX?.playReplyChime();
-        if (ingestTitle) ingestTitle.value = '';
-        if (ingestAuthor) ingestAuthor.value = '';
-        if (ingestContent) ingestContent.value = '';
-        if (pdfStatus) {
-          pdfStatus.style.display = 'none';
-          pdfStatus.textContent = '';
-        }
-        closeIngestModal();
-
-        await loadBooks();
-        const addedBook = state.books.find(b => b.id == data.book_id) || state.books[state.books.length - 1];
-        if (addedBook) {
-          attachBook(addedBook);
-        }
-      } else {
-        window.SFX?.playBlip(320, 0.08);
-        alert(data.error || 'Failed to ingest book.');
-      }
-    } catch (err) {
-      window.SFX?.playBlip(320, 0.08);
-      alert('Network error while ingesting book.');
-    } finally {
-      if (btnSubmitIngest) {
-        btnSubmitIngest.disabled = false;
-        btnSubmitIngest.textContent = 'Ingest Book';
-      }
-    }
-  };
 
   // Initial Load
   loadBooks();

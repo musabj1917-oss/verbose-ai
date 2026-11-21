@@ -25,6 +25,16 @@ if ($uri === '/login' || $uri === '/signup' || $uri === '/auth') {
     exit;
 }
 
+// Admin Panel - requires login
+if ($uri === '/admin' || $uri === '/admin.php') {
+    if (empty($_COOKIE['verbose_session'])) {
+        header('Location: /login');
+        exit;
+    }
+    require __DIR__ . '/../templates/admin.php';
+    exit;
+}
+
 // Direct app/reader access - requires login
 if ($uri === '/app' || $uri === '/reader') {
     if (empty($_COOKIE['verbose_session'])) {
