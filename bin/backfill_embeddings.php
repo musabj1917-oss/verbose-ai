@@ -30,11 +30,12 @@ while (true) {
     }
     $vecs = Embedder::embedBatch($texts);
     if (!$vecs) {
-        if (++$failures >= 5) {
+        if (++$failures >= 10) {
             echo "Giving up after repeated embedding failures (check GEMINI_API_KEY / quota). Embedded so far: {$done}\n";
             exit(1);
         }
-        sleep(15);
+        echo "Embedding rate limit / pause hit. Sleeping 12s (Attempt {$failures}/10)...\n";
+        sleep(12);
         continue;
     }
     $failures = 0;
@@ -43,6 +44,7 @@ while (true) {
         $done++;
     }
     echo "Embedded {$done} chunks...\n";
+    usleep(600000); // 0.6s breathing room to stay well under Gemini RPM
 }
 
 echo "Done. Embedded {$done} chunks.\n";
