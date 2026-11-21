@@ -4,13 +4,16 @@ if (empty($_COOKIE['verbose_session'])) {
     exit;
 }
 $currentUser = htmlspecialchars($_COOKIE['verbose_session'] ?? 'Reader');
+$displayName = explode('@', $currentUser)[0];
 ?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="description" content="Verbose AI — Zero-hallucination literary intelligence grounded in verified book text.">
   <title>Verbose AI</title>
+  <link rel="icon" type="image/svg+xml" href="/img/logo.svg">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -20,42 +23,38 @@ $currentUser = htmlspecialchars($_COOKIE['verbose_session'] ?? 'Reader');
 
   <!-- Collapsible Sidebar -->
   <aside id="app-sidebar" class="sidebar">
+    <div class="sidebar-brand">
+      <img src="/img/logo.svg" class="sidebar-logo" alt="Verbose AI">
+      <span class="sidebar-brand-name">Verbose AI</span>
+    </div>
+
     <div class="sidebar-top">
       <button id="btn-new-chat" class="btn-new-chat">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <line x1="12" y1="5" x2="12" y2="19"></line>
           <line x1="5" y1="12" x2="19" y2="12"></line>
         </svg>
-        <span>New Chat</span>
+        <span>New Conversation</span>
       </button>
-    </div>
-
-    <div style="padding: 0 16px 12px 16px;">
-      <a href="/admin" id="btn-sidebar-admin" style="width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px; background: transparent; border: 1px dashed var(--border-medium); color: var(--text-muted); border-radius: var(--radius-sm); padding: 8px; font-size: 0.74rem; font-family: var(--font-mono); text-decoration: none; transition: all 0.15s ease;" onmouseover="this.style.borderColor='#fff';this.style.color='#fff'" onmouseout="this.style.borderColor='var(--border-medium)';this.style.color='var(--text-muted)'">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <rect x="3" y="3" width="7" height="7"></rect>
-          <rect x="14" y="3" width="7" height="7"></rect>
-          <rect x="14" y="14" width="7" height="7"></rect>
-          <rect x="3" y="14" width="7" height="7"></rect>
-        </svg>
-        <span>Admin Panel (PDF Ingest)</span>
-      </a>
     </div>
 
     <div id="chat-history-list" class="chat-history-list"></div>
 
     <div class="sidebar-bottom">
       <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
-        <span style="font-family: var(--font-mono); font-size: 0.72rem; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 130px;"><?= $currentUser ?></span>
-        <a href="/logout" id="btn-logout" style="color: var(--text-dim); font-size: 0.72rem; text-decoration: none; transition: color 0.15s ease;" onmouseover="this.style.color='#fff'" onmouseout="this.style.color='var(--text-dim)'">Sign Out</a>
+        <div style="display: flex; align-items: center; gap: 8px; overflow: hidden;">
+          <div class="user-avatar"><?= strtoupper(substr($displayName, 0, 1)) ?></div>
+          <span style="font-family: var(--font-mono); font-size: 0.72rem; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"><?= $displayName ?></span>
+        </div>
+        <a href="/logout" style="color: var(--text-dim); font-size: 0.72rem; text-decoration: none; transition: color 0.15s ease; flex-shrink: 0;" onmouseover="this.style.color='#fff'" onmouseout="this.style.color='var(--text-dim)'">Sign Out</a>
       </div>
     </div>
   </aside>
 
   <!-- Full-Screen Main Stage -->
   <main class="main-stage">
-    
-    <!-- Minimal Top Bar -->
+
+    <!-- Top Bar -->
     <header class="top-bar">
       <div class="top-bar-left">
         <button id="btn-toggle-sidebar" class="btn-icon" title="Toggle Sidebar">
@@ -69,7 +68,7 @@ $currentUser = htmlspecialchars($_COOKIE['verbose_session'] ?? 'Reader');
       </div>
 
       <div class="top-bar-right">
-        <button id="btn-open-settings" class="btn-settings-nav" title="Audio & Settings">
+        <button id="btn-open-settings" class="btn-settings-nav" title="Settings">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <circle cx="12" cy="12" r="3"></circle>
             <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
@@ -83,9 +82,18 @@ $currentUser = htmlspecialchars($_COOKIE['verbose_session'] ?? 'Reader');
     <div id="chat-canvas" class="chat-canvas">
       <div id="chat-inner" class="chat-inner">
         <div id="empty-greeting" class="empty-greeting-container">
+          <div class="greeting-logo-wrap">
+            <img src="/img/logo.svg" class="greeting-logo" alt="Verbose AI">
+          </div>
           <h1 id="greeting-heading" class="greeting-time-title">Good morning</h1>
-          <p class="greeting-subtitle">Zero-hallucination literary intelligence. Every answer is strictly grounded in verified book text.</p>
-          <div class="book-attach-hint"><span>Click the <strong>+</strong> button below to attach a book</span></div>
+          <p class="greeting-subtitle">Zero-hallucination literary intelligence.<br>Every answer grounded in verified book text.</p>
+          <div class="book-attach-hint">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
+              <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
+            </svg>
+            <span>Tap <strong>+</strong> to attach a book and begin</span>
+          </div>
         </div>
         <div id="messages-container" style="display: flex; flex-direction: column; gap: 28px; width: 100%;"></div>
       </div>
@@ -97,33 +105,26 @@ $currentUser = htmlspecialchars($_COOKIE['verbose_session'] ?? 'Reader');
         <div id="book-popover" class="book-popover">
           <div class="popover-header">Select Book for Context</div>
           <div id="popover-books-list" style="display: flex; flex-direction: column; gap: 4px;"></div>
-          <div style="border-top: 1px solid var(--border-subtle); padding-top: 6px; margin-top: 4px;">
-            <a href="/admin" id="btn-popover-add-book" style="display: flex; align-items: center; justify-content: center; gap: 6px; width: 100%; background: transparent; border: 1px dashed var(--border-medium); color: var(--text-muted); padding: 6px; border-radius: var(--radius-sm); text-decoration: none; font-family: var(--font-mono); font-size: 0.7rem; transition: all 0.15s ease;" onmouseover="this.style.borderColor='#fff';this.style.color='#fff'" onmouseout="this.style.borderColor='var(--border-medium)';this.style.color='var(--text-muted)'">
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <rect x="3" y="3" width="7" height="7"></rect>
-                <rect x="14" y="3" width="7" height="7"></rect>
-                <rect x="14" y="14" width="7" height="7"></rect>
-                <rect x="3" y="14" width="7" height="7"></rect>
-              </svg>
-              <span>Admin Console (PDF Ingest)</span>
-            </a>
-          </div>
         </div>
 
         <div id="attached-book-pill" class="attached-book-pill" style="display: none;">
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
+            <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
+          </svg>
           <span id="attached-book-label">Book Context</span>
-          <button id="btn-remove-book" class="attached-book-remove" title="Detach book">&times;</button>
+          <button id="btn-remove-book" class="attached-book-remove" title="Remove book">&times;</button>
         </div>
 
         <div class="input-main-row">
-          <button id="btn-book-plus" class="btn-book-plus" title="Attach book (+)">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <line x1="12" y1="5" x2="12" y2="19"></line>
-              <line x1="5" y1="12" x2="19" y2="12"></line>
+          <button id="btn-book-plus" class="btn-book-plus" title="Select book">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
+              <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
             </svg>
           </button>
-          <textarea id="prompt-input" class="input-textarea" rows="1" placeholder="Reply or ask a question based on the book..."></textarea>
-          <button id="btn-send-prompt" class="btn-action-send" title="Send query" disabled>
+          <textarea id="prompt-input" class="input-textarea" rows="1" placeholder="Ask a question about the book..."></textarea>
+          <button id="btn-send-prompt" class="btn-action-send" title="Send" disabled>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
               <line x1="12" y1="19" x2="12" y2="5"></line>
               <polyline points="5 12 12 5 19 12"></polyline>
@@ -138,7 +139,10 @@ $currentUser = htmlspecialchars($_COOKIE['verbose_session'] ?? 'Reader');
   <div id="settings-modal" class="modal-backdrop">
     <div class="modal-dialog">
       <div class="modal-dialog-header">
-        <h2 class="modal-title">Settings</h2>
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <img src="/img/logo.svg" style="width: 20px; height: 20px;" alt="">
+          <h2 class="modal-title">Preferences</h2>
+        </div>
         <button id="btn-close-settings" class="modal-close-btn">&times;</button>
       </div>
       <div class="setting-row">
@@ -149,7 +153,7 @@ $currentUser = htmlspecialchars($_COOKIE['verbose_session'] ?? 'Reader');
             <span class="toggle-slider"></span>
           </label>
         </div>
-        <p class="setting-desc">Retro terminal mechanical keyboard ticks, action blips, and arrival chimes.</p>
+        <p class="setting-desc">Retro terminal keyboard ticks, blips, and reply chimes.</p>
       </div>
       <div class="setting-row">
         <div class="setting-label-row">
@@ -158,16 +162,15 @@ $currentUser = htmlspecialchars($_COOKIE['verbose_session'] ?? 'Reader');
         </div>
         <input type="range" id="setting-volume-slider" class="range-slider" min="0" max="100" value="60">
       </div>
-      <div class="setting-row">
-        <div class="setting-label-row">
-          <span>Book Library &amp; PDFs</span>
-          <a href="/admin" style="background: #ffffff; color: #000000; border: none; padding: 4px 10px; border-radius: var(--radius-sm); font-size: 0.72rem; font-weight: 600; text-decoration: none;">Admin Panel</a>
-        </div>
-        <p class="setting-desc">Ingest multi-page PDFs and manage book volumes in the dedicated admin panel.</p>
-      </div>
       <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid var(--border-subtle); padding-top: 12px;">
         <button id="btn-test-sound" class="btn-test-sound">Test Sound</button>
-        <span style="font-family: var(--font-mono); font-size: 0.65rem; color: var(--text-dim);">Audio Web API</span>
+        <span style="font-family: var(--font-mono); font-size: 0.65rem; color: var(--text-dim);">Web Audio API</span>
+      </div>
+      <div style="border-top: 1px solid var(--border-subtle); padding-top: 12px;">
+        <p style="font-family: var(--font-mono); font-size: 0.65rem; color: var(--text-dim); line-height: 1.6;">
+          Verbose AI v1.0 &bull; Neon Lakebase Postgres &bull; Gemini AI<br>
+          Answers grounded exclusively in verified book passages.
+        </p>
       </div>
     </div>
   </div>

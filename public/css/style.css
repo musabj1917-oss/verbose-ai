@@ -1,27 +1,28 @@
 /* ==========================================================================
-   Verbose AI - Claude-Inspired Pure Black & White Monochromatic Theme
-   Stark brutalist typography, full-screen AI canvas, zero color gradients
+   Verbose AI — Polished Black & White Monochromatic Theme v1.1
+   Minimal brutalist typography, full-screen AI canvas, zero color gradients
    ========================================================================== */
 
 :root {
   --bg-page: #000000;
-  --bg-sidebar: #0a0a0a;
+  --bg-sidebar: #080808;
   --bg-card: #0d0d0d;
-  --bg-hover: #171717;
-  --bg-active: #222222;
-  --border-subtle: #1c1c1c;
-  --border-medium: #2a2a2a;
-  --border-strong: #444444;
-  --text-main: #ffffff;
-  --text-muted: #888888;
-  --text-dim: #555555;
+  --bg-hover: #161616;
+  --bg-active: #1f1f1f;
+  --border-subtle: #191919;
+  --border-medium: #282828;
+  --border-strong: #404040;
+  --text-main: #f5f5f5;
+  --text-muted: #808080;
+  --text-dim: #4a4a4a;
   --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   --font-serif: 'Newsreader', 'Playfair Display', Georgia, serif;
-  --font-mono: 'JetBrains Mono', monospace;
-  --sidebar-w: 260px;
+  --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+  --sidebar-w: 256px;
   --radius-sm: 6px;
   --radius-md: 10px;
   --radius-lg: 16px;
+  --transition: all 0.15s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 *, *::before, *::after {
@@ -39,11 +40,51 @@ body {
   overflow: hidden;
   display: flex;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 /* ==========================================================================
    1. Collapsible Sidebar
    ========================================================================== */
+/* Sidebar brand header */
+.sidebar-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.sidebar-logo {
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+}
+
+.sidebar-brand-name {
+  font-family: var(--font-serif);
+  font-size: 1.05rem;
+  font-weight: 400;
+  color: var(--text-main);
+  letter-spacing: -0.01em;
+}
+
+/* User avatar initial */
+.user-avatar {
+  width: 22px;
+  height: 22px;
+  background: var(--border-strong);
+  color: var(--text-main);
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  font-weight: 600;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
 .sidebar {
   width: var(--sidebar-w);
   height: 100vh;
@@ -51,7 +92,7 @@ body {
   border-right: 1px solid var(--border-subtle);
   display: flex;
   flex-direction: column;
-  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), margin-left 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: var(--transition);
   z-index: 40;
   flex-shrink: 0;
 }
@@ -61,7 +102,7 @@ body {
 }
 
 .sidebar-top {
-  padding: 16px;
+  padding: 12px 16px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -248,22 +289,40 @@ body {
   justify-content: center;
   text-align: center;
   gap: 14px;
-  animation: fadeIn 0.4s ease;
+  animation: fadeIn 0.5s ease;
+}
+
+.greeting-logo-wrap {
+  width: 56px;
+  height: 56px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-medium);
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 4px;
+}
+
+.greeting-logo {
+  width: 32px;
+  height: 32px;
 }
 
 .greeting-time-title {
   font-family: var(--font-serif);
-  font-size: 2.2rem;
+  font-size: 2.4rem;
   font-weight: 400;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.025em;
   color: var(--text-main);
+  line-height: 1.1;
 }
 
 .greeting-subtitle {
   font-size: 0.88rem;
   color: var(--text-muted);
-  max-width: 440px;
-  line-height: 1.5;
+  max-width: 400px;
+  line-height: 1.6;
 }
 
 .book-attach-hint {
@@ -274,9 +333,15 @@ body {
   font-size: 0.72rem;
   color: var(--text-dim);
   border: 1px dashed var(--border-medium);
-  padding: 6px 14px;
+  padding: 7px 16px;
   border-radius: var(--radius-sm);
-  margin-top: 6px;
+  margin-top: 4px;
+  transition: var(--transition);
+}
+
+.book-attach-hint:hover {
+  border-color: var(--border-strong);
+  color: var(--text-muted);
 }
 
 /* Messages */
@@ -652,12 +717,13 @@ body {
   background: var(--bg-card);
   border: 1px solid var(--border-medium);
   border-radius: var(--radius-md);
-  box-shadow: 0 16px 32px rgba(0, 0, 0, 0.9);
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.95);
   padding: 8px;
   display: none;
   flex-direction: column;
   gap: 4px;
   z-index: 50;
+  animation: fadeIn 0.15s ease;
 }
 
 .book-popover.open {
@@ -669,20 +735,20 @@ body {
   font-size: 0.65rem;
   color: var(--text-dim);
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.06em;
   padding: 6px 8px;
   border-bottom: 1px solid var(--border-subtle);
   margin-bottom: 4px;
 }
 
 .popover-book-option {
-  padding: 8px 10px;
+  padding: 10px 10px;
   border-radius: var(--radius-sm);
   cursor: pointer;
   display: flex;
   flex-direction: column;
   gap: 2px;
-  transition: background 0.15s ease;
+  transition: background 0.12s ease;
 }
 
 .popover-book-option:hover {
@@ -691,14 +757,51 @@ body {
 
 .popover-book-title {
   font-family: var(--font-serif);
-  font-size: 0.88rem;
+  font-size: 0.9rem;
   color: var(--text-main);
+  font-weight: 500;
 }
 
 .popover-book-meta {
   font-family: var(--font-mono);
   font-size: 0.65rem;
   color: var(--text-muted);
+}
+
+/* ==========================================================================
+   Responsive — Mobile
+   ========================================================================== */
+@media (max-width: 640px) {
+  .sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 100%;
+    z-index: 100;
+    box-shadow: 4px 0 24px rgba(0, 0, 0, 0.9);
+  }
+
+  .sidebar.closed {
+    transform: translateX(-100%);
+    margin-left: 0;
+  }
+
+  .chat-inner {
+    padding: 0 16px;
+  }
+
+  .bottom-dock {
+    padding: 0 12px 20px 12px;
+  }
+
+  .greeting-time-title {
+    font-size: 1.8rem;
+  }
+
+  .book-popover {
+    width: calc(100vw - 48px);
+    left: 8px;
+  }
 }
 
 /* ==========================================================================

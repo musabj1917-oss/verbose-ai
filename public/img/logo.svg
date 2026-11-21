@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none">
+  <!-- Open book pages -->
+  <path d="M24 36 C24 36 10 32 6 14 L6 10 C6 10 20 14 24 20" fill="#ffffff" opacity="0.95"/>
+  <path d="M24 36 C24 36 38 32 42 14 L42 10 C42 10 28 14 24 20" fill="#ffffff" opacity="0.75"/>
+  <!-- Spine line -->
+  <line x1="24" y1="20" x2="24" y2="36" stroke="#ffffff" stroke-width="1.5" stroke-linecap="round"/>
+  <!-- Dot accent — AI orb -->
+  <circle cx="24" cy="9" r="3.5" fill="#ffffff"/>
+  <circle cx="24" cy="9" r="1.8" fill="#000000"/>
+</svg>

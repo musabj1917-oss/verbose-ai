@@ -164,16 +164,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (state.books.length === 0) {
       const emptyItem = document.createElement('div');
-      emptyItem.style.padding = '12px 8px';
-      emptyItem.style.fontSize = '0.75rem';
-      emptyItem.style.color = 'var(--text-muted)';
-      emptyItem.style.lineHeight = '1.4';
-      emptyItem.innerHTML = `No books in library.<br><a href="#" id="link-empty-ingest" style="color: #fff; text-decoration: underline; display: inline-block; margin-top: 4px;">+ Ingest Book / PDF</a>`;
+      emptyItem.style.cssText = 'padding: 14px 10px; font-size: 0.75rem; color: var(--text-muted); line-height: 1.6; font-family: var(--font-mono);';
+      emptyItem.textContent = 'No books in library. Contact your administrator to add books.';
       popoverBooksList.appendChild(emptyItem);
-      document.getElementById('link-empty-ingest')?.addEventListener('click', (e) => {
-        e.preventDefault();
-        openIngestModal();
-      });
       return;
     }
 
@@ -330,7 +323,7 @@ document.addEventListener('DOMContentLoaded', () => {
       } else {
         state.isGenerating = false;
         renderMessageItem('user', text, null, null);
-        renderMessageItem('ai', 'No book or PDF context is currently loaded. Please click the **+** button below or **Ingest Book / PDF** in the sidebar to add a book or PDF to your library.', []);
+        aiBubble.textContent = 'No book context is loaded. Tap the book icon below to select a book from the library.';
         updateSendButtonState();
         scrollCanvasToBottom();
         return;
