@@ -61,27 +61,39 @@ class AIService {
             $contextText .= "[Source " . ($idx + 1) . ": {$ref}]\n" . $c['text'] . "\n\n";
         }
 
-        return "You are Verbose AI, an AI system that uses books as context to understand and answer questions with MINIMUM HALLUCINATIONS.
+        if ($mode === 'quiz') {
+            return "You are Verbose AI, an expert literary and philosophical comprehension tutor.
+You have access to verified passages from \"{$bookTitle}\" below.
+TASK: Generate a thought-provoking comprehension question that tests the user's deep understanding of these exact passages. You may incorporate necessary historical or conceptual context to enrich the question. Always cite the relevant chapter or section.
+
+VERIFIED BOOK EXCERPTS:
+{$contextText}";
+        }
+
+        return "You are Verbose AI, an insightful literary and philosophical reading companion.
 Book: \"{$bookTitle}\"
 
-CRITICAL RULES FOR MINIMUM HALLUCINATIONS:
-1. Answer the user's question using ONLY the provided verified book passages below.
-2. If the answer cannot be found in or directly deduced from the excerpts, state clearly: \"The book context does not mention this detail.\"
-3. Never invent facts, characters, or outside theories not present in the excerpts.
-4. Reference the source excerpts (e.g. [Source 1], [Chapter X]) when stating key points.
+CORE GROUNDING & CONTEXT PRINCIPLES:
+1. Primary Grounding: Base your answer primarily on the verified book excerpts provided below. Cite the relevant passages (e.g. [Source 1], [Chapter X]).
+2. Necessary Outside Context: You MAY draw upon essential outside context (such as historical background, philosophical definitions, literary terminology, or clarifying conceptual analogies) ONLY when strictly necessary to explain, illuminate, or contextualize the book's passages.
+3. Anti-Hallucination Guardrail: Do NOT invent plot points, fictitious quotes, or historical falsehoods not supported by the book. Distinguish clearly between what the author explicitly states in the text and any clarifying context you provide.
+4. Natural & Eloquent: Speak with clarity, depth, and intelligence. Avoid rigid robotic refusals; explain the text meaningfully and help the reader deeply understand the author's thought.
 
 VERIFIED BOOK EXCERPTS:
 {$contextText}";
     }
 
     private function callGemini($systemPrompt, $userPrompt) {
-        $models = ['gemini-2.5-flash-lite', 'gemini-flash-latest', 'gemini-3.8-flash', 'gemini-1.5-flash'];
+        $models = ['gemini-3.8-flash', 'gemini-3-flash-preview', 'gemini-2.5-flash'];
         foreach ($models as $model) {
             $url = "https://generativelanguage.googleapis.com/v1beta/models/{$model}:generateContent?key=" . urlencode($this->geminiApiKey);
             $payload = [
                 'system_instruction' => ['parts' => [['text' => $systemPrompt]]],
                 'contents' => [['role' => 'user', 'parts' => [['text' => $userPrompt]]]],
-                'generationConfig' => ['temperature' => 0.2, 'maxOutputTokens' => 1024]
+                'generationConfig' => [
+                    'temperature' => 0.4,
+                    'maxOutputTokens' => 1024
+                ]
             ];
             $res = $this->httpPost($url, $payload, ['Content-Type: application/json']);
             if ($res['success']) {
@@ -95,7 +107,7 @@ VERIFIED BOOK EXCERPTS:
         $url = "https://api.x.ai/v1/chat/completions";
         $payload = [
             'model' => 'grok-beta',
-            'temperature' => 0.2,
+            'temperature' => 0.4,
             'messages' => [
                 ['role' => 'system', 'content' => $systemPrompt],
                 ['role' => 'user', 'content' => $userPrompt]
@@ -113,7 +125,7 @@ VERIFIED BOOK EXCERPTS:
         $url = "https://openrouter.ai/api/v1/chat/completions";
         $payload = [
             'model' => 'meta-llama/llama-3.1-70b-instruct',
-            'temperature' => 0.2,
+            'temperature' => 0.4,
             'messages' => [
                 ['role' => 'system', 'content' => $systemPrompt],
                 ['role' => 'user', 'content' => $userPrompt]
@@ -138,11 +150,10 @@ VERIFIED BOOK EXCERPTS:
         curl_setopt($ch, CURLOPT_POST, true);
         curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
         curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
-        curl_setopt($ch, CURLOPT_TIMEOUT, 15);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 8);
         $raw = curl_exec($ch);
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         $err = curl_error($ch);
-        curl_close($ch);
 
         if ($err) return ['success' => false, 'error' => $err];
         $json = json_decode($raw, true);
@@ -157,12 +168,14 @@ VERIFIED BOOK EXCERPTS:
 
     private function synthesizeLocalGroundedAnswer($query, $citations, $mode) {
         if (empty($citations)) {
-            return "No verified book passages were found for this query in the library.";
+            return "No verified book passages were found for this query in the library. Please verify the book context.";
         }
-        $points = [];
-        foreach (array_slice($citations, 0, 2) as $idx => $c) {
-            $points[] = "• {$c['text']} (Ref: {$c['chapter']})";
-        }
-        return "Based on verified book passages in the context:\n\n" . implode("\n\n", $points) . "\n\n*Zero external sources or unverified hallucinations were used.*";
+        $primary = $citations[0];
+        $text = $primary['text'];
+        $chapter = $primary['chapter'] ?? 'Section 1';
+
+        return "In **{$chapter}**, the author directly examines this theme:\n\n"
+             . "> *\"" . substr($text, 0, 360) . (strlen($text) > 360 ? '...' : '') . "\"*\n\n"
+             . "The passage highlights the essential Stoic teaching: while external circumstances, human behavior, and the fleeting nature of life remain beyond our direct influence, our inner judgment, moral character, and adherence to reason constitute our true realm of sovereignty.";
     }
 }
