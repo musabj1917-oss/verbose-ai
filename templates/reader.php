@@ -85,6 +85,9 @@ $currentUser = htmlspecialchars($_COOKIE['verbose_session'] ?? 'Reader');
         <div id="book-popover" class="book-popover">
           <div class="popover-header">Select Book for Context</div>
           <div id="popover-books-list" style="display: flex; flex-direction: column; gap: 4px;"></div>
+          <div style="border-top: 1px solid var(--border-subtle); padding-top: 6px; margin-top: 4px;">
+            <button id="btn-popover-add-book" type="button" style="width: 100%; background: transparent; border: 1px dashed var(--border-medium); color: var(--text-muted); padding: 6px; border-radius: var(--radius-sm); cursor: pointer; font-family: var(--font-mono); font-size: 0.7rem; transition: all 0.15s ease;" onmouseover="this.style.borderColor='#fff';this.style.color='#fff'" onmouseout="this.style.borderColor='var(--border-medium)';this.style.color='var(--text-muted)'">+ Add / Ingest Book</button>
+          </div>
         </div>
 
         <div id="attached-book-pill" class="attached-book-pill" style="display: none;">
@@ -135,10 +138,46 @@ $currentUser = htmlspecialchars($_COOKIE['verbose_session'] ?? 'Reader');
         </div>
         <input type="range" id="setting-volume-slider" class="range-slider" min="0" max="100" value="60">
       </div>
+      <div class="setting-row">
+        <div class="setting-label-row">
+          <span>Book Library</span>
+          <button type="button" id="btn-settings-add-book" style="background: #ffffff; color: #000000; border: none; padding: 4px 10px; border-radius: var(--radius-sm); font-size: 0.72rem; font-weight: 600; cursor: pointer;">+ Ingest Book</button>
+        </div>
+        <p class="setting-desc">Ingest book volumes with semantic paragraph chunking into Neon Postgres.</p>
+      </div>
       <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid var(--border-subtle); padding-top: 12px;">
         <button id="btn-test-sound" class="btn-test-sound">Test Sound</button>
         <span style="font-family: var(--font-mono); font-size: 0.65rem; color: var(--text-dim);">Audio Web API</span>
       </div>
+    </div>
+  </div>
+
+  <!-- Ingest Book Modal -->
+  <div id="ingest-modal" class="modal-backdrop">
+    <div class="modal-dialog" style="max-width: 520px;">
+      <div class="modal-dialog-header">
+        <h2 class="modal-title">Ingest Book into Library</h2>
+        <button id="btn-close-ingest" class="modal-close-btn">&times;</button>
+      </div>
+      <form id="ingest-form" onsubmit="event.preventDefault(); window.handleIngestBook && window.handleIngestBook();">
+        <div class="setting-row" style="padding-bottom: 8px;">
+          <label style="font-family: var(--font-mono); font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase;">Book Title</label>
+          <input type="text" id="ingest-title" placeholder="e.g. Meditations" required style="width: 100%; margin-top: 4px; background: var(--bg-page); border: 1px solid var(--border-medium); color: var(--text-main); padding: 8px 10px; border-radius: var(--radius-sm); outline: none;">
+        </div>
+        <div class="setting-row" style="padding-bottom: 8px;">
+          <label style="font-family: var(--font-mono); font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase;">Author</label>
+          <input type="text" id="ingest-author" placeholder="e.g. Marcus Aurelius" style="width: 100%; margin-top: 4px; background: var(--bg-page); border: 1px solid var(--border-medium); color: var(--text-main); padding: 8px 10px; border-radius: var(--radius-sm); outline: none;">
+        </div>
+        <div class="setting-row" style="padding-bottom: 8px;">
+          <label style="font-family: var(--font-mono); font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase;">Book Content / Excerpts</label>
+          <textarea id="ingest-content" rows="6" placeholder="Paste the book chapters, sections, or text passages here..." required style="width: 100%; margin-top: 4px; background: var(--bg-page); border: 1px solid var(--border-medium); color: var(--text-main); padding: 8px 10px; border-radius: var(--radius-sm); resize: vertical; font-family: var(--font-mono); font-size: 0.8rem; outline: none;"></textarea>
+          <p style="font-size: 0.68rem; color: var(--text-dim); margin-top: 4px;">Text will automatically be semantically chunked and indexed into Neon Postgres.</p>
+        </div>
+        <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px;">
+          <button type="button" id="btn-cancel-ingest" style="background: transparent; border: 1px solid var(--border-medium); color: var(--text-muted); padding: 8px 14px; border-radius: var(--radius-sm); cursor: pointer; font-size: 0.8rem;">Cancel</button>
+          <button type="submit" id="btn-submit-ingest" style="background: #ffffff; border: none; color: #000000; padding: 8px 16px; border-radius: var(--radius-sm); font-weight: 600; cursor: pointer; font-size: 0.8rem;">Ingest Book</button>
+        </div>
+      </form>
     </div>
   </div>
 

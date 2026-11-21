@@ -480,6 +480,83 @@ document.addEventListener('DOMContentLoaded', () => {
       .replace(/'/g, '&#039;');
   }
 
+  // 10. Book Ingestion Modal Management
+  const ingestModal = document.getElementById('ingest-modal');
+  const btnCloseIngest = document.getElementById('btn-close-ingest');
+  const btnCancelIngest = document.getElementById('btn-cancel-ingest');
+  const btnPopoverAddBook = document.getElementById('btn-popover-add-book');
+  const btnSettingsAddBook = document.getElementById('btn-settings-add-book');
+  const ingestForm = document.getElementById('ingest-form');
+  const ingestTitle = document.getElementById('ingest-title');
+  const ingestAuthor = document.getElementById('ingest-author');
+  const ingestContent = document.getElementById('ingest-content');
+  const btnSubmitIngest = document.getElementById('btn-submit-ingest');
+
+  function openIngestModal() {
+    window.SFX?.playBlip(720, 0.04);
+    closePopover();
+    if (settingsModal) settingsModal.classList.remove('open');
+    if (ingestModal) ingestModal.classList.add('open');
+  }
+
+  function closeIngestModal() {
+    window.SFX?.playBlip(480, 0.03);
+    if (ingestModal) ingestModal.classList.remove('open');
+  }
+
+  btnPopoverAddBook?.addEventListener('click', openIngestModal);
+  btnSettingsAddBook?.addEventListener('click', openIngestModal);
+  btnCloseIngest?.addEventListener('click', closeIngestModal);
+  btnCancelIngest?.addEventListener('click', closeIngestModal);
+
+  window.handleIngestBook = async function() {
+    const title = ingestTitle?.value.trim();
+    const author = ingestAuthor?.value.trim() || 'Unknown';
+    const content = ingestContent?.value.trim();
+
+    if (!title || !content) return;
+
+    window.SFX?.playSend();
+    if (btnSubmitIngest) {
+      btnSubmitIngest.disabled = true;
+      btnSubmitIngest.textContent = 'Ingesting Chunks...';
+    }
+
+    try {
+      const res = await fetch('/api.php?action=ingest_book', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title, author, content })
+      });
+      const data = await res.json();
+
+      if (data.success) {
+        window.SFX?.playReplyChime();
+        if (ingestTitle) ingestTitle.value = '';
+        if (ingestAuthor) ingestAuthor.value = '';
+        if (ingestContent) ingestContent.value = '';
+        closeIngestModal();
+
+        await loadBooks();
+        const addedBook = state.books.find(b => b.id == data.book_id) || state.books[state.books.length - 1];
+        if (addedBook) {
+          attachBook(addedBook);
+        }
+      } else {
+        window.SFX?.playBlip(320, 0.08);
+        alert(data.error || 'Failed to ingest book.');
+      }
+    } catch (err) {
+      window.SFX?.playBlip(320, 0.08);
+      alert('Network error while ingesting book.');
+    } finally {
+      if (btnSubmitIngest) {
+        btnSubmitIngest.disabled = false;
+        btnSubmitIngest.textContent = 'Ingest Book';
+      }
+    }
+  };
+
   // Initial Load
   loadBooks();
   if (state.sessions.length > 0) {
