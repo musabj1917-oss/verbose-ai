@@ -380,17 +380,26 @@ if ($action === 'query' || $action === 'scan_image') {
     $bookTitle = $activeBook ? $activeBook['title'] : null;
     $citations = $activeBook ? $bookService->getGroundedChunks($bookId, $query) : [];
 
-    // Separate Vision Model for Image Scanning
+    // Vision Model for Image Scanning & OCR Transcription
+    $scannedTranscription = null;
+    $visionProvider = null;
     if (!empty($image)) {
-        $result = $aiService->scanImage($image, $query, $bookTitle, $citations);
-        echo json_encode([
-            'success' => $result['success'] ?? true,
-            'answer' => $result['answer'] ?? '',
-            'provider' => $result['provider'] ?? 'NVIDIA Nemotron 3.5 Super VL (Vision)',
-            'citations' => $citations,
-            'has_image' => true
-        ]);
-        exit;
+        $visionResult = $aiService->scanImage($image, $query, $bookTitle, $citations);
+        $scannedTranscription = trim($visionResult['transcription'] ?? $visionResult['answer'] ?? '');
+        $visionProvider = $visionResult['provider'] ?? 'Vision Engine';
+
+        // Prepend optical transcription to citations tray for UI inspection
+        if (!empty($scannedTranscription)) {
+            $cleanTranscription = trim(preg_replace('/<think>.*?<\/think>\s*/s', '', $scannedTranscription));
+            $visionCitation = [
+                'id' => 'vision',
+                'chapter' => 'Optical Transcription (' . $visionProvider . ')',
+                'section' => 0,
+                'text' => $cleanTranscription,
+                'similarity' => 1.0
+            ];
+            array_unshift($citations, $visionCitation);
+        }
     }
 
     // Real-Time Token Streaming Grounded Response
@@ -408,13 +417,20 @@ if ($action === 'query' || $action === 'scan_image') {
             echo "data: " . json_encode(['token' => $token]) . "\n\n";
             @ob_flush();
             flush();
-        });
+        }, $scannedTranscription);
+
+        $finalProvider = $result['provider'] ?? 'Verbose AI';
+        if (!empty($visionProvider)) {
+            $finalProvider .= ' • ' . $visionProvider;
+        }
 
         echo "data: " . json_encode([
             'done' => true,
             'answer' => $result['answer'] ?? '',
-            'provider' => $result['provider'] ?? 'Verbose AI',
-            'citations' => $citations
+            'provider' => $finalProvider,
+            'vision_provider' => $visionProvider,
+            'citations' => $citations,
+            'has_image' => !empty($image)
         ]) . "\n\n";
         @ob_flush();
         flush();
@@ -422,13 +438,20 @@ if ($action === 'query' || $action === 'scan_image') {
     }
 
     // Standard Non-Streamed Grounded Discourse
-    $result = $aiService->generateGroundedAnswer($query, $bookTitle, $citations, $mode);
+    $result = $aiService->generateGroundedAnswer($query, $bookTitle, $citations, $mode, $scannedTranscription);
+
+    $finalProvider = $result['provider'] ?? 'Verbose AI';
+    if (!empty($visionProvider)) {
+        $finalProvider .= ' • ' . $visionProvider;
+    }
 
     echo json_encode([
         'success' => $result['success'] ?? true,
         'answer' => $result['answer'] ?? '',
-        'provider' => $result['provider'] ?? 'Verbose AI',
-        'citations' => $citations
+        'provider' => $finalProvider,
+        'vision_provider' => $visionProvider,
+        'citations' => $citations,
+        'has_image' => !empty($image)
     ]);
     exit;
 }

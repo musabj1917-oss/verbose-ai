@@ -44,7 +44,6 @@ class Embedder {
         ]);
         $raw = curl_exec($ch);
         $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        curl_close($ch);
         if ($raw === false || $code !== 200) {
             error_log('Embedding request failed: HTTP ' . $code);
             return null;

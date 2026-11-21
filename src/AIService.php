@@ -20,9 +20,12 @@ class AIService {
         $this->openRouterApiKey = Config::get('OPENROUTER_API_KEY');
     }
 
-    public function generateGroundedAnswer($query, $bookTitle, $citations, $mode = 'ask') {
-        $systemPrompt = $this->buildSystemPrompt($bookTitle, $citations, $mode);
+    public function generateGroundedAnswer($query, $bookTitle, $citations, $mode = 'ask', $scannedTranscription = null) {
+        $systemPrompt = $this->buildSystemPrompt($bookTitle, $citations, $mode, $scannedTranscription);
         $userPrompt = "User Query: " . $query;
+        if (!empty($scannedTranscription)) {
+            $userPrompt .= "\n\n[Context Notice: A scanned document was provided. Answer the query thoroughly using the scanned transcription and any book context.]";
+        }
 
         // Tier 1: Groq LPUs (Ultra-fast ~10ms inference)
         if (!empty($this->groqApiKey)) {
@@ -55,16 +58,19 @@ class AIService {
         return [
             'success' => true,
             'provider' => 'Verbose Grounding Engine',
-            'answer' => $this->synthesizeLocalGroundedAnswer($query, $citations, $mode)
+            'answer' => $this->synthesizeLocalGroundedAnswer($query, $citations, $mode, $scannedTranscription)
         ];
     }
 
     /**
      * Real-time Token Streaming Grounded Answer
      */
-    public function streamGroundedAnswer($query, $bookTitle, $citations, $mode = 'ask', $onToken = null) {
-        $systemPrompt = $this->buildSystemPrompt($bookTitle, $citations, $mode);
+    public function streamGroundedAnswer($query, $bookTitle, $citations, $mode = 'ask', $onToken = null, $scannedTranscription = null) {
+        $systemPrompt = $this->buildSystemPrompt($bookTitle, $citations, $mode, $scannedTranscription);
         $userPrompt = "User Query: " . $query;
+        if (!empty($scannedTranscription)) {
+            $userPrompt .= "\n\n[Context Notice: A scanned document was provided. Answer the query thoroughly using the scanned transcription and any book context.]";
+        }
 
         // Tier 1: Groq streaming
         if (!empty($this->groqApiKey)) {
@@ -85,7 +91,7 @@ class AIService {
         }
 
         // Fallback: Non-streaming cascade
-        $fallback = $this->generateGroundedAnswer($query, $bookTitle, $citations, $mode);
+        $fallback = $this->generateGroundedAnswer($query, $bookTitle, $citations, $mode, $scannedTranscription);
         if (is_callable($onToken) && !empty($fallback['answer'])) {
             $onToken($fallback['answer']);
         }
@@ -94,30 +100,21 @@ class AIService {
 
     /**
      * Image Scanning & Document OCR using dedicated Vision-Language Models
+     * Strictly performs optical transcription and visual inspection without answering questions.
      */
     public function scanImage($imageDataUrl, $userPrompt = '', $bookTitle = null, $citations = []) {
-        $contextSnippet = "";
-        if (!empty($citations)) {
-            $contextSnippet .= "\n\nVERIFIED BOOK CONTEXT EXCERPTS:\n";
-            foreach ($citations as $idx => $c) {
-                $ref = $c['chapter'] ?? ('Passage ' . ($idx + 1));
-                $rawChunk = $c['text'] ?? '';
-                $chunkText = function_exists('mb_substr') ? mb_substr($rawChunk, 0, 500, 'UTF-8') : substr($rawChunk, 0, 500);
-                $contextSnippet .= "[{$ref}]\n" . $chunkText . "\n\n";
-            }
+        $systemInstruction = "You are Verbose AI's High-Precision Optical Transcription and Visual OCR Engine.
+Your sole purpose is to inspect the provided image, document, page, or manuscript and extract its visual contents with extreme optical precision:
+1. Verbatim Transcription: Faithfully and completely transcribe all visible text, headings, questions, lists, captions, equations, and handwriting exactly as they appear.
+2. Visual Elements & Structure: Concisely describe any visible diagrams, charts, figures, illustrations, or structural layout.
+3. Objective Accuracy: Transcribe accurately without answering questions, speculating, or providing commentary. Ensure all question text, problem statements, and instructions visible on the page are preserved verbatim.";
+
+        $query = "Transcribe all visible text from this page or image verbatim and describe any visual diagrams or figures.";
+        if (!empty($userPrompt) && trim($userPrompt) !== 'Analyze this scanned page.') {
+            $query .= " Note any text, numbers, or questions especially relevant to: " . $userPrompt;
         }
-
-        $systemInstruction = "You are Verbose AI's Vision & Document Intelligence Engine.
-You examine scanned book pages, manuscripts, excerpts, and images with extreme optical precision.
-Tasks:
-1. Optical Transcription: If text, handwriting, or printed passages are visible, accurately transcribe the key excerpts verbatim.
-2. Conceptual & Philosophical Analysis: Explain the meaning, literary nuances, philosophical significance, or historical context of what appears on the page.
-3. Explicit Context Utilization: If book context excerpts are provided below, directly cross-reference and synthesize the scanned image with that context.
-4. Natural eloquence: Present your response in clean markdown with clear headers. Distinguish between verbatim transcribed text and your analysis." . $contextSnippet;
-
-        $query = !empty($userPrompt) ? $userPrompt : "Scan and analyze this page or image. Transcribe any visible text and provide deep literary and conceptual analysis.";
         if (!empty($bookTitle)) {
-            $query .= " (Book Context: {$bookTitle})";
+            $query .= " (Document context: {$bookTitle})";
         }
 
         // Dedicated Multimodal Vision Models with auto-failover cascade
@@ -129,7 +126,6 @@ Tasks:
             'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free'
         ];
 
-        $debugErrors = [];
         if (!empty($this->openRouterApiKey)) {
             $url = "https://openrouter.ai/api/v1/chat/completions";
             foreach ($visionModels as $model) {
@@ -148,7 +144,7 @@ Tasks:
                             ]
                         ]
                     ],
-                    'temperature' => 0.2,
+                    'temperature' => 0.1,
                     'max_tokens' => 4096,
                     'include_reasoning' => false,
                     'reasoning' => ['effort' => 'none']
@@ -160,13 +156,12 @@ Tasks:
                     'X-Title: Verbose AI Vision'
                 ];
                 $res = $this->httpPost($url, $payload, $headers);
-                $debugErrors[$model] = $res;
                 if ($res['success'] && isset($res['data']['choices'][0]['message'])) {
                     $msg = $res['data']['choices'][0]['message'];
                     $content = trim($msg['content'] ?? '');
                     $reasoning = trim($msg['reasoning'] ?? '');
 
-                    // Encapsulate any reasoning tokens in a <think> block for structured Claude-style presentation
+                    // Encapsulate any reasoning tokens in a <think> block
                     if (!empty($reasoning)) {
                         $content = "<think>\n" . $reasoning . "\n</think>\n\n" . $content;
                     }
@@ -183,6 +178,7 @@ Tasks:
 
                         return [
                             'success' => true,
+                            'transcription' => $content,
                             'answer' => $content,
                             'provider' => $shortName,
                             'model' => $model
@@ -219,6 +215,7 @@ Tasks:
                 if ($res['success'] && !empty($res['answer'])) {
                     return [
                         'success' => true,
+                        'transcription' => $res['answer'],
                         'answer' => $res['answer'],
                         'provider' => "Google AI Studio ({$gmod} Vision)",
                         'model' => $gmod
@@ -228,15 +225,46 @@ Tasks:
         }
 
         return [
-            'success' => true,
-            'answer' => "**Scanned Image Captured**\n\nThe image was received and inspected. To enable live multimodal inference, ensure your OpenRouter API key is active. The visual layout and page dimensions were successfully buffered.",
-            'provider' => 'Verbose Optical Scanner (Local)',
-            'debug_errors' => $debugErrors ?? []
+            'success' => false,
+            'transcription' => '',
+            'answer' => '',
+            'provider' => 'Verbose Optical Scanner (Local)'
         ];
     }
 
-    private function buildSystemPrompt($bookTitle, $citations, $mode) {
+    private function buildSystemPrompt($bookTitle, $citations, $mode = 'ask', $scannedTranscription = null) {
+        $scannedSection = "";
+        if (!empty($scannedTranscription)) {
+            $cleanTranscription = trim(preg_replace('/<think>.*?<\/think>\s*/s', '', $scannedTranscription));
+            if (!empty($cleanTranscription)) {
+                $scannedSection = "\n=== OPTICAL TRANSCRIPTION FROM SCANNED DOCUMENT / PAGE ===\n" .
+                    "The user provided an image/document which was optically transcribed verbatim below:\n\"\"\"\n" .
+                    $cleanTranscription .
+                    "\n\"\"\"\n";
+            }
+        }
+
+        $contextText = "";
+        foreach ($citations as $idx => $c) {
+            if (isset($c['id']) && $c['id'] === 'vision') {
+                continue;
+            }
+            $ref = $c['chapter'] ?? ('Passage ' . ($idx + 1));
+            $contextText .= "[Source " . ($idx + 1) . ": {$ref}]\n" . ($c['text'] ?? '') . "\n\n";
+        }
+
         if (empty($bookTitle)) {
+            if (!empty($scannedSection)) {
+                return "You are Verbose AI, an insightful literary and analytical reading and reasoning companion.
+{$scannedSection}
+CORE REASONING & GROUNDING PRINCIPLES:
+1. Grounding in Scanned Document: Address the user's inquiry, answer any questions posed, solve problems, or provide deep literary/conceptual analysis grounded directly in the optical transcription above.
+2. Direct Answer: If the user query or the scanned document presents specific questions, exercises, or passages to analyze, answer them directly, thoroughly, and with intellectual clarity.
+3. Literary Depth & Rigor: Speak with eloquence, depth, and intelligence. Distinguish clearly between what is explicitly stated in the transcribed text and your analysis or explanation.
+4. Anti-Hallucination Guardrail: Do not invent facts, quotes, or details not present in the transcription. You may freely use necessary background knowledge, definitions, or clarifying analogies to illuminate the text.
+5. Natural & Articulate: Keep your tone thoughtful, articulate, and engaging.";
+            }
+
             return "You are Verbose AI, an insightful, eloquent literary and philosophical companion.
 Engage the reader with philosophical depth, historical context, and intellectual clarity.
 Answer the user's questions directly, naturally, and with profound intellectual rigor.
@@ -244,32 +272,26 @@ Do NOT reference or hallucinate any imaginary book or claim you are reading a 'S
 Keep your tone sophisticated, thoughtful, and articulate.";
         }
 
-        $contextText = "";
-        foreach ($citations as $idx => $c) {
-            $ref = $c['chapter'] ?? ('Passage ' . ($idx + 1));
-            $contextText .= "[Source " . ($idx + 1) . ": {$ref}]\n" . $c['text'] . "\n\n";
-        }
-
         if ($mode === 'quiz') {
             return "You are Verbose AI, an expert literary and philosophical comprehension tutor.
 You have access to verified passages from \"{$bookTitle}\" below.
+{$scannedSection}
 TASK: Generate a thought-provoking comprehension question that tests the user's deep understanding of these exact passages. You may incorporate necessary historical or conceptual context to enrich the question. Always cite the relevant chapter or section.
 
-VERIFIED BOOK EXCERPTS:
-{$contextText}";
+" . (!empty($contextText) ? "VERIFIED BOOK EXCERPTS:\n{$contextText}" : "");
         }
 
         return "You are Verbose AI, an insightful literary and philosophical reading companion.
 Book: \"{$bookTitle}\"
-
+{$scannedSection}
 CORE GROUNDING & CONTEXT PRINCIPLES:
-1. Explicit Context Utilization: Read the verified book excerpts below with absolute care. You MUST directly cite and synthesize specific quotes, facts, and passages from these excerpts (e.g. [Page X] or [Source Y]) to substantiate your answer. Do not ignore the provided context.
-2. Necessary Outside Context: You may freely draw upon essential outside context (historical background, philosophical definitions, literary terminology, or clarifying analogies) whenever helpful to explain and illuminate the book's ideas. Do NOT provide external website URLs or website links.
-3. Anti-Hallucination Guardrail: Do NOT invent plot points, fictitious quotes, or false facts not supported by the book. Distinguish clearly between what the author explicitly states in the text and any clarifying context you provide.
-4. Natural, eloquent, and profound: Speak with depth, clarity, and intelligence. Avoid rigid refusals; explain the text meaningfully and help the reader deeply understand the author's thought.
+1. Explicit Context Utilization: Read the verified book excerpts and any scanned document transcription above with absolute care. You MUST directly cite and synthesize specific quotes, facts, and passages from these sources (e.g. [Page X], [Source Y], or [Scanned Page]) to substantiate your answer. Do not ignore the provided context.
+2. Scanned Document Integration: If an optical transcription from a scanned page is provided above, address the user's inquiry by directly analyzing, explaining, or answering questions from that page in the context of \"{$bookTitle}\".
+3. Necessary Outside Context: You may freely draw upon essential outside context (historical background, philosophical definitions, literary terminology, or clarifying analogies) whenever helpful to explain and illuminate the book's ideas. Do NOT provide external website URLs or website links.
+4. Anti-Hallucination Guardrail: Do NOT invent plot points, fictitious quotes, or false facts not supported by the book or document. Distinguish clearly between what the text explicitly states and any clarifying analysis.
+5. Natural, eloquent, and profound: Speak with depth, clarity, and intelligence. Avoid rigid refusals; explain the text meaningfully and help the reader deeply understand the author's thought.
 
-VERIFIED BOOK EXCERPTS:
-{$contextText}";
+" . (!empty($contextText) ? "VERIFIED BOOK EXCERPTS:\n{$contextText}" : "");
     }
 
     private function callGroq($systemPrompt, $userPrompt) {
@@ -497,7 +519,15 @@ VERIFIED BOOK EXCERPTS:
         return ['success' => false, 'error' => "API error status: {$httpCode}", 'code' => $httpCode, 'raw' => $raw, 'data' => $json];
     }
 
-    private function synthesizeLocalGroundedAnswer($query, $citations, $mode) {
+    private function synthesizeLocalGroundedAnswer($query, $citations, $mode = 'ask', $scannedTranscription = null) {
+        if (!empty($scannedTranscription)) {
+            $cleanSnippet = trim(preg_replace('/<think>.*?<\/think>\s*/s', '', $scannedTranscription));
+            $snippet = function_exists('mb_substr') ? mb_substr($cleanSnippet, 0, 350, 'UTF-8') : substr($cleanSnippet, 0, 350);
+            return "Based on the optically transcribed page:\n\n"
+                 . "> *\"" . $snippet . (strlen($cleanSnippet) > 350 ? '...' : '') . "\"*\n\n"
+                 . "The document's visible content directly relates to your inquiry: **\"{$query}\"**.\n\n"
+                 . "• **Verified Source:** Scanned Page Transcription";
+        }
         if (empty($citations)) {
             return "Verbose AI is operating in open philosophical discourse. You may ask any question across literature, philosophy, and history, attach a book from your library for grounded chapter analysis, or scan an image page.";
         }

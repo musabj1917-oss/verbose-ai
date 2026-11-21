@@ -416,7 +416,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const contemplationWord = document.createElement('span');
     contemplationWord.className = 'contemplation-word';
     contemplationWord.textContent = image 
-      ? 'Scanning image with Nemotron VL...' 
+      ? 'Scanning image & reasoning...' 
       : (state.selectedBook ? `Contemplating ${state.selectedBook.title}...` : 'Contemplating inquiry...');
 
     contemplationBadge.appendChild(orbCanvas);
