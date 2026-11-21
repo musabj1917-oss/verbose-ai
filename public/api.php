@@ -7,6 +7,13 @@ $action = $_GET['action'] ?? '';
 $bookService = new BookService();
 $aiService = new AIService();
 
+if ($action === 'test_vision') {
+    $img = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+    $res = $aiService->scanImage($img, "test prompt");
+    echo json_encode($res);
+    exit;
+}
+
 if ($action === 'migrate') {
     $pdo = Database::getConnection();
     if (!$pdo) {

@@ -125,6 +125,7 @@ Tasks:
             'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free'
         ];
 
+        $debugErrors = [];
         if (!empty($this->openRouterApiKey)) {
             $url = "https://openrouter.ai/api/v1/chat/completions";
             foreach ($visionModels as $model) {
@@ -155,6 +156,7 @@ Tasks:
                     'X-Title: Verbose AI Vision'
                 ];
                 $res = $this->httpPost($url, $payload, $headers);
+                $debugErrors[$model] = $res;
                 if ($res['success'] && isset($res['data']['choices'][0]['message'])) {
                     $msg = $res['data']['choices'][0]['message'];
                     $content = trim($msg['content'] ?? '');
@@ -216,7 +218,8 @@ Tasks:
         return [
             'success' => true,
             'answer' => "**Scanned Image Captured**\n\nThe image was received and inspected. To enable live multimodal inference, ensure your OpenRouter API key is active. The visual layout and page dimensions were successfully buffered.",
-            'provider' => 'Verbose Optical Scanner (Local)'
+            'provider' => 'Verbose Optical Scanner (Local)',
+            'debug_errors' => $debugErrors ?? []
         ];
     }
 
@@ -477,7 +480,7 @@ VERIFIED BOOK EXCERPTS:
             }
             return ['success' => true, 'data' => $json];
         }
-        return ['success' => false, 'error' => "API error status: {$httpCode}"];
+        return ['success' => false, 'error' => "API error status: {$httpCode}", 'code' => $httpCode, 'raw' => $raw, 'data' => $json];
     }
 
     private function synthesizeLocalGroundedAnswer($query, $citations, $mode) {
