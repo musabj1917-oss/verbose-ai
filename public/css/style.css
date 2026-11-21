@@ -276,7 +276,7 @@ body {
 .chat-canvas {
   flex: 1;
   overflow-y: auto;
-  padding: 32px 0 160px 0;
+  padding: 32px 0 220px 0;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -435,6 +435,27 @@ body {
   margin-bottom: 14px;
 }
 
+.msg-bubble-ai h1,
+.msg-bubble-ai h2,
+.msg-bubble-ai h3 {
+  color: #ffffff;
+  margin: 18px 0 8px 0;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.msg-bubble-ai h3 {
+  font-size: 1.05rem;
+}
+
+.msg-bubble-ai blockquote {
+  border-left: 2px solid var(--border-medium);
+  padding-left: 12px;
+  margin: 12px 0;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
 .msg-bubble-ai strong {
   font-weight: 600;
   color: #ffffff;
@@ -443,6 +464,21 @@ body {
 .msg-bubble-ai em {
   font-family: var(--font-serif);
   font-style: italic;
+}
+
+.streaming-cursor {
+  display: inline-block;
+  width: 7px;
+  height: 15px;
+  background: #ffffff;
+  margin-left: 4px;
+  vertical-align: -2px;
+  animation: blinkCursor 0.7s infinite;
+}
+
+@keyframes blinkCursor {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
 }
 
 /* Thinking Orb Inline Contemplation Badge */

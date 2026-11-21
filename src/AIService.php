@@ -60,6 +60,39 @@ class AIService {
     }
 
     /**
+     * Real-time Token Streaming Grounded Answer
+     */
+    public function streamGroundedAnswer($query, $bookTitle, $citations, $mode = 'ask', $onToken = null) {
+        $systemPrompt = $this->buildSystemPrompt($bookTitle, $citations, $mode);
+        $userPrompt = "User Query: " . $query;
+
+        // Tier 1: Groq streaming
+        if (!empty($this->groqApiKey)) {
+            $response = $this->callGroqStream($systemPrompt, $userPrompt, $onToken);
+            if ($response['success']) {
+                $response['provider'] = 'Groq LPUs (' . ($response['model'] ?? 'Qwen 27B') . ')';
+                return $response;
+            }
+        }
+
+        // Tier 2: OpenRouter streaming
+        if (!empty($this->openRouterApiKey)) {
+            $response = $this->callOpenRouterStream($systemPrompt, $userPrompt, $onToken);
+            if ($response['success']) {
+                $response['provider'] = 'OpenRouter (' . ($response['model'] ?? 'Llama 3.3 70B') . ')';
+                return $response;
+            }
+        }
+
+        // Fallback: Non-streaming cascade
+        $fallback = $this->generateGroundedAnswer($query, $bookTitle, $citations, $mode);
+        if (is_callable($onToken) && !empty($fallback['answer'])) {
+            $onToken($fallback['answer']);
+        }
+        return $fallback;
+    }
+
+    /**
      * Image Scanning & Document OCR using dedicated Vision-Language Models
      */
     public function scanImage($imageDataUrl, $userPrompt = '', $bookTitle = null) {
@@ -100,7 +133,7 @@ Tasks:
                         ]
                     ],
                     'temperature' => 0.2,
-                    'max_tokens' => 1024
+                    'max_tokens' => 4096
                 ];
                 $headers = [
                     'Content-Type: application/json',
@@ -211,7 +244,7 @@ VERIFIED BOOK EXCERPTS:
             $payload = [
                 'model' => $model,
                 'temperature' => 0.4,
-                'max_tokens' => 1024,
+                'max_tokens' => 4096,
                 'messages' => [
                     ['role' => 'system', 'content' => $systemPrompt],
                     ['role' => 'user', 'content' => $userPrompt]
@@ -236,6 +269,38 @@ VERIFIED BOOK EXCERPTS:
         return ['success' => false, 'error' => 'Groq inference failed'];
     }
 
+    private function callGroqStream($systemPrompt, $userPrompt, $onToken) {
+        $url = "https://api.groq.com/openai/v1/chat/completions";
+        $models = ['qwen/qwen3.8-27b', 'openai/gpt-oss-120b', 'allam-2-7b'];
+
+        foreach ($models as $model) {
+            $accumulated = "";
+            $payload = [
+                'model' => $model,
+                'temperature' => 0.4,
+                'max_tokens' => 4096,
+                'stream' => true,
+                'messages' => [
+                    ['role' => 'system', 'content' => $systemPrompt],
+                    ['role' => 'user', 'content' => $userPrompt]
+                ]
+            ];
+            $headers = [
+                'Content-Type: application/json',
+                'Authorization: Bearer ' . $this->groqApiKey
+            ];
+            $res = $this->httpStream($url, $payload, $headers, $onToken, $accumulated);
+            if ($res && !empty($accumulated)) {
+                return [
+                    'success' => true,
+                    'answer' => $accumulated,
+                    'model' => $model
+                ];
+            }
+        }
+        return ['success' => false];
+    }
+
     private function callOpenRouter($systemPrompt, $userPrompt) {
         $url = "https://openrouter.ai/api/v1/chat/completions";
         $models = [
@@ -248,7 +313,7 @@ VERIFIED BOOK EXCERPTS:
             $payload = [
                 'model' => $model,
                 'temperature' => 0.4,
-                'max_tokens' => 1024,
+                'max_tokens' => 4096,
                 'messages' => [
                     ['role' => 'system', 'content' => $systemPrompt],
                     ['role' => 'user', 'content' => $userPrompt]
@@ -275,6 +340,43 @@ VERIFIED BOOK EXCERPTS:
         return ['success' => false, 'error' => 'OpenRouter inference failed'];
     }
 
+    private function callOpenRouterStream($systemPrompt, $userPrompt, $onToken) {
+        $url = "https://openrouter.ai/api/v1/chat/completions";
+        $models = [
+            'meta-llama/llama-3.3-70b-instruct',
+            'meta-llama/llama-3.1-70b-instruct'
+        ];
+
+        foreach ($models as $model) {
+            $accumulated = "";
+            $payload = [
+                'model' => $model,
+                'temperature' => 0.4,
+                'max_tokens' => 4096,
+                'stream' => true,
+                'messages' => [
+                    ['role' => 'system', 'content' => $systemPrompt],
+                    ['role' => 'user', 'content' => $userPrompt]
+                ]
+            ];
+            $headers = [
+                'Content-Type: application/json',
+                'Authorization: Bearer ' . $this->openRouterApiKey,
+                'HTTP-Referer: https://verboseai.vercel.app',
+                'X-Title: Verbose AI'
+            ];
+            $res = $this->httpStream($url, $payload, $headers, $onToken, $accumulated);
+            if ($res && !empty($accumulated)) {
+                return [
+                    'success' => true,
+                    'answer' => $accumulated,
+                    'model' => $model
+                ];
+            }
+        }
+        return ['success' => false];
+    }
+
     private function callGemini($systemPrompt, $userPrompt) {
         $models = ['gemini-3.8-flash', 'gemini-3-flash-preview', 'gemini-2.5-flash'];
         foreach ($models as $model) {
@@ -284,7 +386,7 @@ VERIFIED BOOK EXCERPTS:
                 'contents' => [['role' => 'user', 'parts' => [['text' => $userPrompt]]]],
                 'generationConfig' => [
                     'temperature' => 0.4,
-                    'maxOutputTokens' => 1024
+                    'maxOutputTokens' => 4096
                 ]
             ];
             $res = $this->httpPost($url, $payload, ['Content-Type: application/json']);
@@ -295,13 +397,53 @@ VERIFIED BOOK EXCERPTS:
         return ['success' => false, 'error' => 'All Gemini models attempted'];
     }
 
+    private function httpStream($url, $data, $headers, $onToken, &$accumulated) {
+        $ch = curl_init($url);
+        curl_setopt($ch, CURLOPT_POST, true);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
+        curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 60);
+        curl_setopt($ch, CURLOPT_USERAGENT, 'VerboseAI/1.0');
+        $buffer = "";
+
+        curl_setopt($ch, CURLOPT_WRITEFUNCTION, function($ch, $chunk) use (&$buffer, &$accumulated, $onToken) {
+            $buffer .= $chunk;
+            while (($pos = strpos($buffer, "\n")) !== false) {
+                $line = substr($buffer, 0, $pos);
+                $buffer = substr($buffer, $pos + 1);
+                $line = trim($line);
+                if (strpos($line, 'data: ') === 0) {
+                    $jsonStr = substr($line, 6);
+                    if ($jsonStr === '[DONE]') continue;
+                    $decoded = json_decode($jsonStr, true);
+                    if (isset($decoded['choices'][0]['delta']['content'])) {
+                        $token = $decoded['choices'][0]['delta']['content'];
+                        $accumulated .= $token;
+                        if (is_callable($onToken)) {
+                            $onToken($token);
+                        }
+                    }
+                }
+            }
+            return strlen($chunk);
+        });
+
+        $success = curl_exec($ch);
+        $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        if (!$success || $code < 200 || $code >= 300) {
+            return false;
+        }
+        return true;
+    }
+
     private function httpPost($url, $data, $headers) {
         $ch = curl_init($url);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
         curl_setopt($ch, CURLOPT_POST, true);
         curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
         curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
-        curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 60);
+        curl_setopt($ch, CURLOPT_USERAGENT, 'VerboseAI/1.0');
         $raw = curl_exec($ch);
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         $err = curl_error($ch);

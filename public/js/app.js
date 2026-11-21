@@ -441,7 +441,8 @@ document.addEventListener('DOMContentLoaded', () => {
         book_id: state.selectedBook ? state.selectedBook.id : null,
         query: userMessageText,
         image: image || null,
-        mode: 'ask'
+        mode: 'ask',
+        stream: !image
       };
 
       const res = await fetch('/api.php?action=query', {
@@ -449,33 +450,76 @@ document.addEventListener('DOMContentLoaded', () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
-      const data = await res.json();
 
       inlineOrb?.setState('breathing');
       contemplationBadge.style.display = 'none';
 
+      let fullAnswer = '';
+      let finalProvider = null;
+      let finalCitations = [];
+
+      const contentType = res.headers.get('content-type') || '';
+      if (contentType.includes('text/event-stream') && res.body) {
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop();
+
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed.startsWith('data: ')) continue;
+            const jsonStr = trimmed.slice(6);
+            try {
+              const parsed = JSON.parse(jsonStr);
+              if (parsed.token) {
+                fullAnswer += parsed.token;
+                aiBubble.innerHTML = formatMarkdown(fullAnswer) + '<span class="streaming-cursor"></span>';
+                scrollCanvasToBottom();
+              }
+              if (parsed.done) {
+                if (parsed.provider) finalProvider = parsed.provider;
+                if (parsed.citations) finalCitations = parsed.citations;
+                if (parsed.answer && !fullAnswer) fullAnswer = parsed.answer;
+              }
+            } catch (e) {}
+          }
+        }
+      } else {
+        const data = await res.json();
+        fullAnswer = data.answer || 'No answer generated.';
+        finalProvider = data.provider || null;
+        finalCitations = data.citations || [];
+        await streamTextTypewriter(aiBubble, fullAnswer);
+      }
+
+      // Finalize message display without cursor
+      aiBubble.innerHTML = formatMarkdown(fullAnswer);
       window.SFX?.playReplyChime();
 
-      const answerText = data.answer || 'No answer generated.';
-      aiBubble.innerHTML = formatMarkdown(answerText);
-
-      if (data.provider) {
+      if (finalProvider) {
         const provBadge = document.createElement('div');
         provBadge.className = 'provider-model-badge';
-        provBadge.textContent = data.provider;
+        provBadge.textContent = finalProvider;
         aiRow.appendChild(provBadge);
       }
 
-      if (data.citations && data.citations.length > 0) {
-        const tray = createSourcesTray(data.citations);
+      if (finalCitations && finalCitations.length > 0) {
+        const tray = createSourcesTray(finalCitations);
         if (tray) aiRow.appendChild(tray);
       }
 
       session.messages.push({
         role: 'ai',
-        content: answerText,
-        citations: data.citations || [],
-        provider: data.provider || null
+        content: fullAnswer,
+        citations: finalCitations,
+        provider: finalProvider
       });
       saveSessions();
 
@@ -592,9 +636,26 @@ document.addEventListener('DOMContentLoaded', () => {
     chatCanvas.scrollTop = chatCanvas.scrollHeight;
   }
 
+  async function streamTextTypewriter(container, text) {
+    if (!text) return;
+    const tokens = text.match(/\S+|\s+/g) || [text];
+    let current = '';
+    const step = 2;
+    for (let i = 0; i < tokens.length; i += step) {
+      current += tokens.slice(i, i + step).join('');
+      container.innerHTML = formatMarkdown(current) + '<span class="streaming-cursor"></span>';
+      scrollCanvasToBottom();
+      await new Promise(r => setTimeout(r, 14));
+    }
+  }
+
   function formatMarkdown(text) {
     if (!text) return '';
     return escapeHtml(text)
+      .replace(/^### (.*$)/gim, '<h3>$1</h3>')
+      .replace(/^## (.*$)/gim, '<h2>$1</h2>')
+      .replace(/^# (.*$)/gim, '<h1>$1</h1>')
+      .replace(/^> (.*$)/gim, '<blockquote>$1</blockquote>')
       .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
       .replace(/\*(.*?)\*/g, '<em>$1</em>')
       .replace(/\[(.*?)\]\((https?:\/\/[^\s\)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer" class="chat-external-link">$1 <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline-block;vertical-align:middle;margin-left:2px;"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg></a>')

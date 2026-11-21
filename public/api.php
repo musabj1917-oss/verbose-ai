@@ -217,6 +217,7 @@ if ($action === 'query' || $action === 'scan_image') {
     $query = trim($input['query'] ?? $input['prompt'] ?? '');
     $image = $input['image'] ?? null;
     $mode = $input['mode'] ?? 'ask';
+    $stream = !empty($input['stream']) || isset($_GET['stream']);
 
     $activeBook = null;
     if (!empty($bookId)) {
@@ -245,7 +246,35 @@ if ($action === 'query' || $action === 'scan_image') {
         exit;
     }
 
-    // Standard Multi-Provider Grounded Discourse
+    // Real-Time Token Streaming Grounded Response
+    if ($stream) {
+        header('Content-Type: text/event-stream; charset=utf-8');
+        header('Cache-Control: no-cache, no-transform');
+        header('Connection: keep-alive');
+        header('X-Accel-Buffering: no');
+
+        while (ob_get_level() > 0) {
+            ob_end_flush();
+        }
+
+        $result = $aiService->streamGroundedAnswer($query, $bookTitle, $citations, $mode, function($token) {
+            echo "data: " . json_encode(['token' => $token]) . "\n\n";
+            @ob_flush();
+            flush();
+        });
+
+        echo "data: " . json_encode([
+            'done' => true,
+            'answer' => $result['answer'] ?? '',
+            'provider' => $result['provider'] ?? 'Verbose AI',
+            'citations' => $citations
+        ]) . "\n\n";
+        @ob_flush();
+        flush();
+        exit;
+    }
+
+    // Standard Non-Streamed Grounded Discourse
     $result = $aiService->generateGroundedAnswer($query, $bookTitle, $citations, $mode);
 
     echo json_encode([
