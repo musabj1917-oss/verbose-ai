@@ -36,9 +36,13 @@ class RetroAudioEngine {
     }
   }
 
+<<<<<<< HEAD
   getVolume() {
     return this.volume;
   }
+=======
+  getVolume() { return this.volume; }
+>>>>>>> origin/main
 
   setEnabled(val) {
     this.enabled = !!val;
@@ -58,6 +62,7 @@ class RetroAudioEngine {
     if (!this.enabled || this.volume === 0) return;
     this.init();
     if (!this.ctx) return;
+<<<<<<< HEAD
 
     const t = this.ctx.currentTime;
     const osc = this.ctx.createOscillator();
@@ -74,6 +79,18 @@ class RetroAudioEngine {
     osc.connect(gain);
     gain.connect(this.getDestination());
 
+=======
+    const t = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = 'square';
+    osc.frequency.setValueAtTime(1200 + Math.random() * 300, t);
+    osc.frequency.exponentialRampToValueAtTime(300, t + 0.012);
+    gain.gain.setValueAtTime(0.04, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.012);
+    osc.connect(gain);
+    gain.connect(this.getDestination());
+>>>>>>> origin/main
     osc.start(t);
     osc.stop(t + 0.012);
   }
@@ -82,6 +99,7 @@ class RetroAudioEngine {
     if (!this.enabled || this.volume === 0) return;
     this.init();
     if (!this.ctx) return;
+<<<<<<< HEAD
 
     const t = this.ctx.currentTime;
     const osc = this.ctx.createOscillator();
@@ -97,6 +115,18 @@ class RetroAudioEngine {
     osc.connect(gain);
     gain.connect(this.getDestination());
 
+=======
+    const t = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = 'square';
+    osc.frequency.setValueAtTime(freq, t);
+    osc.frequency.setValueAtTime(freq * 1.5, t + duration * 0.5);
+    gain.gain.setValueAtTime(0.06, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + duration);
+    osc.connect(gain);
+    gain.connect(this.getDestination());
+>>>>>>> origin/main
     osc.start(t);
     osc.stop(t + duration);
   }
@@ -105,6 +135,7 @@ class RetroAudioEngine {
     if (!this.enabled || this.volume === 0) return;
     this.init();
     if (!this.ctx) return;
+<<<<<<< HEAD
 
     const t = this.ctx.currentTime;
     const osc = this.ctx.createOscillator();
@@ -120,6 +151,18 @@ class RetroAudioEngine {
     osc.connect(gain);
     gain.connect(this.getDestination());
 
+=======
+    const t = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = 'square';
+    osc.frequency.setValueAtTime(320, t);
+    osc.frequency.exponentialRampToValueAtTime(960, t + 0.07);
+    gain.gain.setValueAtTime(0.07, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.07);
+    osc.connect(gain);
+    gain.connect(this.getDestination());
+>>>>>>> origin/main
     osc.start(t);
     osc.stop(t + 0.07);
   }
@@ -128,9 +171,13 @@ class RetroAudioEngine {
     if (!this.enabled || this.volume === 0) return;
     this.init();
     if (!this.ctx) return;
+<<<<<<< HEAD
 
     const t = this.ctx.currentTime;
 
+=======
+    const t = this.ctx.currentTime;
+>>>>>>> origin/main
     const o1 = this.ctx.createOscillator();
     const g1 = this.ctx.createGain();
     o1.type = 'square';
@@ -141,7 +188,10 @@ class RetroAudioEngine {
     g1.connect(this.getDestination());
     o1.start(t);
     o1.stop(t + 0.08);
+<<<<<<< HEAD
 
+=======
+>>>>>>> origin/main
     const o2 = this.ctx.createOscillator();
     const g2 = this.ctx.createGain();
     o2.type = 'square';
