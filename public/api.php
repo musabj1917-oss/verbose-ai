@@ -236,6 +236,128 @@ if ($action === 'delete_book') {
     exit;
 }
 
+if ($action === 'get_admin_stats') {
+    $pdo = Database::getConnection();
+    if (!$pdo) {
+        echo json_encode(['success' => false, 'error' => 'Database unreachable']);
+        exit;
+    }
+    try {
+        $bookCount = intval($pdo->query("SELECT COUNT(*) FROM books")->fetchColumn() ?: 0);
+        $totalChunks = intval($pdo->query("SELECT COUNT(*) FROM book_chunks")->fetchColumn() ?: 0);
+        $embeddedChunks = intval($pdo->query("SELECT COUNT(*) FROM book_chunks WHERE embedding IS NOT NULL")->fetchColumn() ?: 0);
+        $unembeddedChunks = max(0, $totalChunks - $embeddedChunks);
+        $pct = $totalChunks > 0 ? round(($embeddedChunks / $totalChunks) * 100, 1) : 100.0;
+
+        echo json_encode([
+            'success' => true,
+            'total_books' => $bookCount,
+            'total_chunks' => $totalChunks,
+            'embedded_chunks' => $embeddedChunks,
+            'unembedded_chunks' => $unembeddedChunks,
+            'embedding_pct' => $pct,
+            'services' => [
+                'database' => 'CONNECTED',
+                'pgvector' => true,
+                'gemini' => !empty(Config::get('GEMINI_API_KEY')),
+                'groq' => !empty(Config::get('GROQ_API_KEY')),
+                'openrouter' => !empty(Config::get('OPENROUTER_API_KEY'))
+            ]
+        ]);
+        exit;
+    } catch (Exception $e) {
+        echo json_encode(['success' => false, 'error' => $e->getMessage()]);
+        exit;
+    }
+}
+
+if ($action === 'get_book_chunks') {
+    $bookId = intval($_GET['book_id'] ?? 0);
+    if (!$bookId) {
+        echo json_encode(['success' => false, 'error' => 'Book ID required']);
+        exit;
+    }
+    $pdo = Database::getConnection();
+    if (!$pdo) {
+        echo json_encode(['success' => false, 'error' => 'Database unreachable']);
+        exit;
+    }
+    try {
+        $stmt = $pdo->prepare("SELECT id, chapter_title, section_number, chunk_index, 
+            chunk_text, LENGTH(chunk_text) as char_length,
+            (CASE WHEN embedding IS NOT NULL THEN true ELSE false END) as is_embedded
+            FROM book_chunks WHERE book_id = :book_id ORDER BY id ASC LIMIT 200");
+        $stmt->execute([':book_id' => $bookId]);
+        $chunks = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        echo json_encode(['success' => true, 'chunks' => $chunks]);
+        exit;
+    } catch (Exception $e) {
+        echo json_encode(['success' => false, 'error' => $e->getMessage()]);
+        exit;
+    }
+}
+
+if ($action === 'backfill_embeddings') {
+    $pdo = Database::getConnection();
+    if (!$pdo) {
+        echo json_encode(['success' => false, 'error' => 'Database unreachable']);
+        exit;
+    }
+    try {
+        $rows = $pdo->query("SELECT id, chunk_text FROM book_chunks WHERE embedding IS NULL ORDER BY id ASC LIMIT 16")->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        if (empty($rows)) {
+            $totalChunks = intval($pdo->query("SELECT COUNT(*) FROM book_chunks")->fetchColumn() ?: 0);
+            echo json_encode([
+                'success' => true,
+                'processed' => 0,
+                'remaining' => 0,
+                'total_chunks' => $totalChunks,
+                'message' => 'All chunks are vectorized!'
+            ]);
+            exit;
+        }
+
+        $texts = [];
+        foreach ($rows as $r) {
+            $texts[] = $r['chunk_text'];
+        }
+
+        $vecs = Embedder::embedBatch($texts);
+        if (!$vecs) {
+            echo json_encode(['success' => false, 'error' => 'Gemini embedding API call failed. Verify GEMINI_API_KEY.']);
+            exit;
+        }
+
+        $updateStmt = $pdo->prepare("UPDATE book_chunks SET embedding = CAST(? AS vector) WHERE id = ?");
+        $processed = 0;
+        foreach ($rows as $pos => $r) {
+            if (isset($vecs[$pos])) {
+                $updateStmt->execute([Embedder::toLiteral($vecs[$pos]), $r['id']]);
+                $processed++;
+            }
+        }
+
+        $remaining = intval($pdo->query("SELECT COUNT(*) FROM book_chunks WHERE embedding IS NULL")->fetchColumn() ?: 0);
+        $totalChunks = intval($pdo->query("SELECT COUNT(*) FROM book_chunks")->fetchColumn() ?: 0);
+        $embedded = $totalChunks - $remaining;
+        $pct = $totalChunks > 0 ? round(($embedded / $totalChunks) * 100, 1) : 100.0;
+
+        echo json_encode([
+            'success' => true,
+            'processed' => $processed,
+            'remaining' => $remaining,
+            'embedded_chunks' => $embedded,
+            'total_chunks' => $totalChunks,
+            'embedding_pct' => $pct,
+            'message' => "Embedded {$processed} chunks. {$remaining} remaining."
+        ]);
+        exit;
+    } catch (Exception $e) {
+        echo json_encode(['success' => false, 'error' => $e->getMessage()]);
+        exit;
+    }
+}
+
 if ($action === 'query' || $action === 'scan_image') {
     $input = json_decode(file_get_contents('php://input'), true);
     $bookId = $input['book_id'] ?? null;
