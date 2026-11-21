@@ -101,7 +101,9 @@ class AIService {
             $contextSnippet .= "\n\nVERIFIED BOOK CONTEXT EXCERPTS:\n";
             foreach ($citations as $idx => $c) {
                 $ref = $c['chapter'] ?? ('Passage ' . ($idx + 1));
-                $contextSnippet .= "[{$ref}]\n" . substr($c['text'], 0, 500) . "\n\n";
+                $rawChunk = $c['text'] ?? '';
+                $chunkText = function_exists('mb_substr') ? mb_substr($rawChunk, 0, 500, 'UTF-8') : substr($rawChunk, 0, 500);
+                $contextSnippet .= "[{$ref}]\n" . $chunkText . "\n\n";
             }
         }
 
@@ -118,10 +120,12 @@ Tasks:
             $query .= " (Book Context: {$bookTitle})";
         }
 
-        // Separate Dedicated Vision Models on OpenRouter
+        // Dedicated Multimodal Vision Models with auto-failover cascade
         $visionModels = [
             'nvidia/nemotron-3.5-super-vl',
             'nvidia/nemotron-3.5-super-vl:free',
+            'meta-llama/llama-3.2-11b-vision-instruct',
+            'qwen/qwen-2.5-vl-72b-instruct:free',
             'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free'
         ];
 
@@ -150,7 +154,7 @@ Tasks:
                     'reasoning' => ['effort' => 'none']
                 ];
                 $headers = [
-                    'Content-Type: application/json',
+                    'Content-Type: application/json; charset=utf-8',
                     'Authorization: Bearer ' . $this->openRouterApiKey,
                     'HTTP-Referer: https://verboseai.vercel.app',
                     'X-Title: Verbose AI Vision'
@@ -168,7 +172,15 @@ Tasks:
                     }
 
                     if (!empty($content)) {
-                        $shortName = strpos($model, 'nano') !== false ? 'NVIDIA Nemotron 3 Nano Omni (Vision)' : 'NVIDIA Nemotron 3.5 Super VL (Vision)';
+                        $shortName = 'NVIDIA Nemotron 3.5 Super VL (Vision)';
+                        if (strpos($model, 'llama') !== false) {
+                            $shortName = 'Meta Llama 3.2 Vision (OpenRouter)';
+                        } elseif (strpos($model, 'qwen') !== false) {
+                            $shortName = 'Qwen 2.5 VL 72B (OpenRouter)';
+                        } elseif (strpos($model, 'nano') !== false) {
+                            $shortName = 'NVIDIA Nemotron 3 Nano Omni (Vision)';
+                        }
+
                         return [
                             'success' => true,
                             'answer' => $content,
@@ -424,7 +436,8 @@ VERIFIED BOOK EXCERPTS:
     private function httpStream($url, $data, $headers, $onToken, &$accumulated) {
         $ch = curl_init($url);
         curl_setopt($ch, CURLOPT_POST, true);
-        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
+        $jsonPayload = json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, $jsonPayload);
         curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
         curl_setopt($ch, CURLOPT_TIMEOUT, 60);
         curl_setopt($ch, CURLOPT_USERAGENT, 'VerboseAI/1.0');
@@ -464,7 +477,8 @@ VERIFIED BOOK EXCERPTS:
         $ch = curl_init($url);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
         curl_setopt($ch, CURLOPT_POST, true);
-        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
+        $jsonPayload = json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, $jsonPayload);
         curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
         curl_setopt($ch, CURLOPT_TIMEOUT, 60);
         curl_setopt($ch, CURLOPT_USERAGENT, 'VerboseAI/1.0');
