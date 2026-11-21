@@ -110,6 +110,7 @@ Tasks:
 
         // Separate Dedicated Vision Models on OpenRouter
         $visionModels = [
+            'nvidia/nemotron-3.5-super-vl',
             'nvidia/nemotron-3.5-super-vl:free',
             'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free'
         ];
@@ -142,8 +143,12 @@ Tasks:
                     'X-Title: Verbose AI Vision'
                 ];
                 $res = $this->httpPost($url, $payload, $headers);
-                if ($res['success'] && isset($res['data']['choices'][0]['message']['content'])) {
-                    $content = trim($res['data']['choices'][0]['message']['content']);
+                if ($res['success'] && isset($res['data']['choices'][0]['message'])) {
+                    $msg = $res['data']['choices'][0]['message'];
+                    $content = trim($msg['content'] ?? '');
+                    if (empty($content) && !empty($msg['reasoning'])) {
+                        $content = trim($msg['reasoning']);
+                    }
                     if (!empty($content)) {
                         $shortName = strpos($model, 'nano') !== false ? 'NVIDIA Nemotron 3 Nano Omni (Vision)' : 'NVIDIA Nemotron 3.5 Super VL (Vision)';
                         return [
