@@ -22,10 +22,6 @@ class Database {
             $pass = Config::get('DB_PASS', '');
             $dsn = "pgsql:host={$host};port={$port};dbname={$dbname};sslmode=require";
         } else {
-<<<<<<< HEAD
-            // Parse DATABASE_URL (postgres://user:pass@host:port/dbname)
-=======
->>>>>>> origin/main
             $dbparts = parse_url($databaseUrl);
             $host = $dbparts['host'] ?? 'localhost';
             $port = $dbparts['port'] ?? '5432';
@@ -41,17 +37,9 @@ class Database {
                 PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
                 PDO::ATTR_TIMEOUT => 5
             ]);
-<<<<<<< HEAD
-            // Ensure pgvector extension exists
             self::$pdo->exec("CREATE EXTENSION IF NOT EXISTS vector;");
             return self::$pdo;
         } catch (Exception $e) {
-            // Fallback or log error
-=======
-            self::$pdo->exec("CREATE EXTENSION IF NOT EXISTS vector;");
-            return self::$pdo;
-        } catch (Exception $e) {
->>>>>>> origin/main
             error_log("Database connection error: " . $e->getMessage());
             return null;
         }

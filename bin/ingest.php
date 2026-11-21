@@ -27,10 +27,6 @@ if (empty($content)) {
 
 echo "1. Reading and parsing '{$title}' by {$author}...\n";
 
-<<<<<<< HEAD
-// Simple semantic chunker by paragraph breaks (roughly 500-1000 tokens)
-=======
->>>>>>> origin/main
 $paragraphs = preg_split('/\n\s*\n/', $content);
 $chunks = [];
 $currentChunk = "";
@@ -54,30 +50,16 @@ echo "2. Generated " . count($chunks) . " semantic chunks.\n";
 
 $pdo = Database::getConnection();
 if (!$pdo) {
-<<<<<<< HEAD
-    echo "⚠️ Database not configured or unreachable. Check DATABASE_URL in .env.\n";
-    echo "Chunks preview (first chunk):\n---\n" . substr($chunks[0], 0, 250) . "...\n---\n";
-=======
     echo "Database not configured or unreachable. Check DATABASE_URL in .env.\n";
->>>>>>> origin/main
     exit(0);
 }
 
 try {
     $pdo->beginTransaction();
-<<<<<<< HEAD
-
-    // Insert Book
-=======
->>>>>>> origin/main
     $stmt = $pdo->prepare("INSERT INTO books (title, author, description, chunks_count, is_active) VALUES (?, ?, ?, ?, true) RETURNING id");
     $stmt->execute([$title, $author, $description, count($chunks)]);
     $bookId = $stmt->fetchColumn();
 
-<<<<<<< HEAD
-    // Insert Chunks
-=======
->>>>>>> origin/main
     $chunkStmt = $pdo->prepare("INSERT INTO book_chunks (book_id, chapter_title, chunk_text, chunk_index) VALUES (?, ?, ?, ?)");
     foreach ($chunks as $idx => $chunkText) {
         $chapterTitle = "Section " . ($idx + 1);
@@ -85,16 +67,9 @@ try {
     }
 
     $pdo->commit();
-<<<<<<< HEAD
-    echo "✅ Successfully ingested '{$title}' (ID: {$bookId}) with " . count($chunks) . " verified chunks into Neon Postgres!\n";
-} catch (Exception $e) {
-    $pdo->rollBack();
-    echo "❌ Ingestion failed: " . $e->getMessage() . "\n";
-=======
     echo "Successfully ingested '{$title}' (ID: {$bookId}) with " . count($chunks) . " verified chunks into Neon Postgres!\n";
 } catch (Exception $e) {
     $pdo->rollBack();
     echo "Ingestion failed: " . $e->getMessage() . "\n";
->>>>>>> origin/main
     exit(1);
 }
