@@ -48,11 +48,23 @@ if ($action === 'migrate') {
 
 if ($action === 'ingest_book') {
     $rawInput = file_get_contents('php://input');
-    $input = json_decode($rawInput, true);
-    $title = trim($input['title'] ?? '');
-    $author = trim($input['author'] ?? 'Unknown');
-    $description = trim($input['description'] ?? 'Curated library volume.');
-    $content = trim($input['content'] ?? '');
+    $input = json_decode($rawInput, true) ?: [];
+
+    $title = trim($_POST['title'] ?? ($input['title'] ?? ''));
+    $author = trim($_POST['author'] ?? ($input['author'] ?? 'Unknown'));
+    $description = trim($_POST['description'] ?? ($input['description'] ?? 'Curated library volume.'));
+    $content = trim($_POST['content'] ?? ($input['content'] ?? ''));
+
+    // Handle uploaded file if present
+    if (empty($content) && !empty($_FILES['file']['tmp_name']) && is_uploaded_file($_FILES['file']['tmp_name'])) {
+        $fileText = file_get_contents($_FILES['file']['tmp_name']);
+        if ($fileText !== false) {
+            $content = $fileText;
+            if (empty($title)) {
+                $title = pathinfo($_FILES['file']['name'], PATHINFO_FILENAME);
+            }
+        }
+    }
 
     if (empty($title) || empty($content)) {
         echo json_encode(['success' => false, 'error' => 'Title and book content are required.']);

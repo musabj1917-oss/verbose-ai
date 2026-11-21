@@ -103,20 +103,37 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   initSettings();
 
-  // 3. Mechanical Key-tick SFX on typing
-  promptInput?.addEventListener('input', () => {
-    window.SFX?.playKeyTick();
-    btnSend.disabled = promptInput.value.trim().length === 0;
+  // 3. Mechanical Key-tick SFX on typing & Send Button State
+  function updateSendButtonState() {
+    if (!promptInput || !btnSend) return;
+    const hasText = promptInput.value.trim().length > 0;
+    btnSend.disabled = !hasText || state.isGenerating;
+  }
 
-    promptInput.style.height = 'auto';
-    promptInput.style.height = Math.min(promptInput.scrollHeight, 140) + 'px';
+  ['input', 'keyup', 'change', 'paste', 'compositionend'].forEach(evt => {
+    promptInput?.addEventListener(evt, () => {
+      if (evt === 'input') window.SFX?.playKeyTick();
+      updateSendButtonState();
+      promptInput.style.height = 'auto';
+      promptInput.style.height = Math.min(promptInput.scrollHeight, 140) + 'px';
+    });
   });
 
   promptInput?.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      if (!btnSend.disabled) handleSend();
+      handleSend();
     }
+  });
+
+  // Explicit click and touch listeners for send button
+  btnSend?.addEventListener('click', (e) => {
+    e.preventDefault();
+    handleSend();
+  });
+  btnSend?.addEventListener('touchend', (e) => {
+    e.preventDefault();
+    handleSend();
   });
 
   // 4. Sidebar Toggle
@@ -151,8 +168,12 @@ document.addEventListener('DOMContentLoaded', () => {
       emptyItem.style.fontSize = '0.75rem';
       emptyItem.style.color = 'var(--text-muted)';
       emptyItem.style.lineHeight = '1.4';
-      emptyItem.innerHTML = `No books in library.<br>Ingest a book via <code style="font-family: var(--font-mono); color: #fff;">bin/ingest.php</code>`;
+      emptyItem.innerHTML = `No books in library.<br><a href="#" id="link-empty-ingest" style="color: #fff; text-decoration: underline; display: inline-block; margin-top: 4px;">+ Ingest Book / PDF</a>`;
       popoverBooksList.appendChild(emptyItem);
+      document.getElementById('link-empty-ingest')?.addEventListener('click', (e) => {
+        e.preventDefault();
+        openIngestModal();
+      });
       return;
     }
 
@@ -302,6 +323,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
     emptyGreeting.style.display = 'none';
 
+    // Auto-attach first book if none selected
+    if (!state.selectedBook) {
+      if (state.books.length > 0) {
+        attachBook(state.books[0]);
+      } else {
+        state.isGenerating = false;
+        renderMessageItem('user', text, null, null);
+        renderMessageItem('ai', 'No book or PDF context is currently loaded. Please click the **+** button below or **Ingest Book / PDF** in the sidebar to add a book or PDF to your library.', []);
+        updateSendButtonState();
+        scrollCanvasToBottom();
+        return;
+      }
+    }
+
     const bookTitle = state.selectedBook ? state.selectedBook.title : null;
 
     // Render User Message
@@ -388,6 +423,7 @@ document.addEventListener('DOMContentLoaded', () => {
       aiBubble.textContent = 'Error contacting Verbose AI server. Please check database connection.';
     } finally {
       state.isGenerating = false;
+      updateSendButtonState();
       scrollCanvasToBottom();
     }
   }
@@ -480,17 +516,24 @@ document.addEventListener('DOMContentLoaded', () => {
       .replace(/'/g, '&#039;');
   }
 
-  // 10. Book Ingestion Modal Management
+  // 10. Book & PDF Ingestion Modal Management
   const ingestModal = document.getElementById('ingest-modal');
   const btnCloseIngest = document.getElementById('btn-close-ingest');
   const btnCancelIngest = document.getElementById('btn-cancel-ingest');
   const btnPopoverAddBook = document.getElementById('btn-popover-add-book');
   const btnSettingsAddBook = document.getElementById('btn-settings-add-book');
+  const btnSidebarIngest = document.getElementById('btn-sidebar-ingest');
   const ingestForm = document.getElementById('ingest-form');
   const ingestTitle = document.getElementById('ingest-title');
   const ingestAuthor = document.getElementById('ingest-author');
   const ingestContent = document.getElementById('ingest-content');
   const btnSubmitIngest = document.getElementById('btn-submit-ingest');
+
+  // PDF Dropzone elements
+  const pdfDropZone = document.getElementById('pdf-drop-zone');
+  const ingestFileInput = document.getElementById('ingest-file-input');
+  const pdfStatus = document.getElementById('pdf-status');
+  const pdfDropLabel = document.getElementById('pdf-drop-label');
 
   function openIngestModal() {
     window.SFX?.playBlip(720, 0.04);
@@ -506,8 +549,108 @@ document.addEventListener('DOMContentLoaded', () => {
 
   btnPopoverAddBook?.addEventListener('click', openIngestModal);
   btnSettingsAddBook?.addEventListener('click', openIngestModal);
+  btnSidebarIngest?.addEventListener('click', openIngestModal);
   btnCloseIngest?.addEventListener('click', closeIngestModal);
   btnCancelIngest?.addEventListener('click', closeIngestModal);
+
+  // PDF & File Drag-and-Drop / Selection
+  pdfDropZone?.addEventListener('click', () => {
+    ingestFileInput?.click();
+  });
+
+  ['dragenter', 'dragover'].forEach(eventName => {
+    pdfDropZone?.addEventListener(eventName, (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      pdfDropZone.style.borderColor = '#ffffff';
+      pdfDropZone.style.background = 'rgba(255, 255, 255, 0.08)';
+    });
+  });
+
+  ['dragleave', 'drop'].forEach(eventName => {
+    pdfDropZone?.addEventListener(eventName, (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      pdfDropZone.style.borderColor = 'var(--border-medium)';
+      pdfDropZone.style.background = 'var(--bg-hover)';
+    });
+  });
+
+  pdfDropZone?.addEventListener('drop', (e) => {
+    const files = e.dataTransfer?.files;
+    if (files && files.length > 0) {
+      handleFileSelected(files[0]);
+    }
+  });
+
+  ingestFileInput?.addEventListener('change', (e) => {
+    const files = e.target.files;
+    if (files && files.length > 0) {
+      handleFileSelected(files[0]);
+    }
+  });
+
+  async function handleFileSelected(file) {
+    if (!file) return;
+    window.SFX?.playBlip(750, 0.04);
+
+    // Auto-populate Title if empty
+    const cleanTitle = file.name.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ');
+    if (ingestTitle && !ingestTitle.value.trim()) {
+      ingestTitle.value = cleanTitle.charAt(0).toUpperCase() + cleanTitle.slice(1);
+    }
+
+    if (file.name.toLowerCase().endsWith('.pdf')) {
+      await extractTextFromPdf(file);
+    } else {
+      // Plain text or markdown
+      const reader = new FileReader();
+      reader.onload = () => {
+        if (ingestContent) ingestContent.value = reader.result;
+        if (pdfStatus) {
+          pdfStatus.style.display = 'block';
+          pdfStatus.textContent = `Loaded text file: ${file.name} (${Math.round(file.size / 1024)} KB)`;
+        }
+      };
+      reader.readAsText(file);
+    }
+  }
+
+  async function extractTextFromPdf(file) {
+    if (!pdfStatus) return;
+    pdfStatus.style.display = 'block';
+    pdfStatus.textContent = 'Reading PDF structure...';
+
+    try {
+      if (!window.pdfjsLib) {
+        throw new Error('PDF parser engine is initializing. Please try again in a moment.');
+      }
+      const arrayBuffer = await file.arrayBuffer();
+      const loadingTask = window.pdfjsLib.getDocument({ data: arrayBuffer });
+      const pdf = await loadingTask.promise;
+      const numPages = pdf.numPages;
+
+      let fullText = '';
+      for (let pageNum = 1; pageNum <= numPages; pageNum++) {
+        pdfStatus.textContent = `Extracting text: Page ${pageNum} of ${numPages}...`;
+        const page = await pdf.getPage(pageNum);
+        const textContent = await page.getTextContent();
+        const pageText = textContent.items.map(item => item.str).join(' ');
+        fullText += `\n\n[Page ${pageNum}]\n` + pageText;
+      }
+
+      if (ingestContent) {
+        ingestContent.value = fullText.trim();
+      }
+
+      const wordCount = fullText.split(/\s+/).filter(Boolean).length;
+      pdfStatus.textContent = `Extracted ${numPages} pages from ${file.name} (~${wordCount} words ready to ingest)`;
+      window.SFX?.playReplyChime();
+    } catch (err) {
+      pdfStatus.textContent = 'Error parsing PDF: ' + err.message;
+      window.SFX?.playBlip(300, 0.08);
+    }
+  }
 
   window.handleIngestBook = async function() {
     const title = ingestTitle?.value.trim();
@@ -535,6 +678,10 @@ document.addEventListener('DOMContentLoaded', () => {
         if (ingestTitle) ingestTitle.value = '';
         if (ingestAuthor) ingestAuthor.value = '';
         if (ingestContent) ingestContent.value = '';
+        if (pdfStatus) {
+          pdfStatus.style.display = 'none';
+          pdfStatus.textContent = '';
+        }
         closeIngestModal();
 
         await loadBooks();

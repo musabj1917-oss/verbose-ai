@@ -30,6 +30,18 @@ $currentUser = htmlspecialchars($_COOKIE['verbose_session'] ?? 'Reader');
       </button>
     </div>
 
+    <div style="padding: 0 16px 12px 16px;">
+      <button id="btn-sidebar-ingest" type="button" style="width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px; background: transparent; border: 1px dashed var(--border-medium); color: var(--text-muted); border-radius: var(--radius-sm); padding: 8px; font-size: 0.74rem; font-family: var(--font-mono); cursor: pointer; transition: all 0.15s ease;" onmouseover="this.style.borderColor='#fff';this.style.color='#fff'" onmouseout="this.style.borderColor='var(--border-medium)';this.style.color='var(--text-muted)'">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+          <polyline points="14 2 14 8 20 8"></polyline>
+          <line x1="12" y1="18" x2="12" y2="12"></line>
+          <line x1="9" y1="15" x2="15" y2="15"></line>
+        </svg>
+        <span>Ingest Book / PDF</span>
+      </button>
+    </div>
+
     <div id="chat-history-list" class="chat-history-list"></div>
 
     <div class="sidebar-bottom">
@@ -152,13 +164,32 @@ $currentUser = htmlspecialchars($_COOKIE['verbose_session'] ?? 'Reader');
     </div>
   </div>
 
-  <!-- Ingest Book Modal -->
+  <!-- Ingest Book & PDF Modal -->
   <div id="ingest-modal" class="modal-backdrop">
-    <div class="modal-dialog" style="max-width: 520px;">
+    <div class="modal-dialog" style="max-width: 540px;">
       <div class="modal-dialog-header">
-        <h2 class="modal-title">Ingest Book into Library</h2>
+        <h2 class="modal-title">Ingest Book / PDF into Library</h2>
         <button id="btn-close-ingest" class="modal-close-btn">&times;</button>
       </div>
+
+      <!-- PDF / Document Drag & Drop Area -->
+      <div id="pdf-drop-zone" style="border: 2px dashed var(--border-medium); border-radius: var(--radius-sm); padding: 18px; text-align: center; cursor: pointer; transition: all 0.15s ease; background: var(--bg-hover); margin-bottom: 14px;">
+        <input type="file" id="ingest-file-input" accept=".pdf,.txt,.md" style="display: none;">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin: 0 auto 6px; color: var(--text-muted); display: block;">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+          <polyline points="14 2 14 8 20 8"></polyline>
+          <line x1="12" y1="18" x2="12" y2="12"></line>
+          <line x1="9" y1="15" x2="15" y2="15"></line>
+        </svg>
+        <span id="pdf-drop-label" style="font-family: var(--font-mono); font-size: 0.78rem; color: var(--text-main); display: block;">
+          Drop PDF / Text file here, or <span style="text-decoration: underline;">click to browse</span>
+        </span>
+        <span style="font-size: 0.68rem; color: var(--text-dim); display: block; margin-top: 3px;">
+          Extracts multi-page PDFs directly into verified book chunks
+        </span>
+        <div id="pdf-status" style="display: none; margin-top: 8px; font-family: var(--font-mono); font-size: 0.72rem; color: #ffffff;"></div>
+      </div>
+
       <form id="ingest-form" onsubmit="event.preventDefault(); window.handleIngestBook && window.handleIngestBook();">
         <div class="setting-row" style="padding-bottom: 8px;">
           <label style="font-family: var(--font-mono); font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase;">Book Title</label>
@@ -170,7 +201,7 @@ $currentUser = htmlspecialchars($_COOKIE['verbose_session'] ?? 'Reader');
         </div>
         <div class="setting-row" style="padding-bottom: 8px;">
           <label style="font-family: var(--font-mono); font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase;">Book Content / Excerpts</label>
-          <textarea id="ingest-content" rows="6" placeholder="Paste the book chapters, sections, or text passages here..." required style="width: 100%; margin-top: 4px; background: var(--bg-page); border: 1px solid var(--border-medium); color: var(--text-main); padding: 8px 10px; border-radius: var(--radius-sm); resize: vertical; font-family: var(--font-mono); font-size: 0.8rem; outline: none;"></textarea>
+          <textarea id="ingest-content" rows="6" placeholder="Extracted text from PDF or pasted passages will appear here..." required style="width: 100%; margin-top: 4px; background: var(--bg-page); border: 1px solid var(--border-medium); color: var(--text-main); padding: 8px 10px; border-radius: var(--radius-sm); resize: vertical; font-family: var(--font-mono); font-size: 0.78rem; outline: none;"></textarea>
           <p style="font-size: 0.68rem; color: var(--text-dim); margin-top: 4px;">Text will automatically be semantically chunked and indexed into Neon Postgres.</p>
         </div>
         <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px;">
@@ -181,6 +212,12 @@ $currentUser = htmlspecialchars($_COOKIE['verbose_session'] ?? 'Reader');
     </div>
   </div>
 
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script>
+    if (window.pdfjsLib) {
+      window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    }
+  </script>
   <script src="/js/thinking-orbs.js"></script>
   <script src="/js/sfx.js"></script>
   <script src="/js/app.js"></script>
