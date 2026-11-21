@@ -164,6 +164,7 @@
 </head>
 <body>
   <div class="auth-page-wrap">
+    <canvas id="starfield-canvas" class="starfield-canvas"></canvas>
     <div class="auth-card">
       <div class="auth-brand">
         <img src="/img/logo.svg" class="auth-logo" alt="Verbose AI Logo">
@@ -192,6 +193,7 @@
     </div>
   </div>
   <script src="/js/sfx.js"></script>
+  <script src="/js/starfield.js"></script>
   <script>
     const tabSignin = document.getElementById('tab-signin');
     const tabSignup = document.getElementById('tab-signup');

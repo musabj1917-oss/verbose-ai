@@ -53,6 +53,7 @@ $displayName = explode('@', $currentUser)[0];
 
   <!-- Full-Screen Main Stage -->
   <main class="main-stage">
+    <canvas id="starfield-canvas" class="starfield-canvas"></canvas>
 
     <!-- Top Bar -->
     <header class="top-bar">
@@ -177,6 +178,7 @@ $displayName = explode('@', $currentUser)[0];
 
   <script src="/js/thinking-orbs.js"></script>
   <script src="/js/sfx.js"></script>
+  <script src="/js/starfield.js"></script>
   <script src="/js/app.js"></script>
 </body>
 </html>
