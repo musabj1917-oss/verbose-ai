@@ -73,13 +73,11 @@ VERIFIED BOOK EXCERPTS:
         return "You are Verbose AI, an insightful literary and philosophical reading companion.
 Book: \"{$bookTitle}\"
 
-CORE ACCURACY & SOURCE ATTRIBUTION RULES:
-1. Primary Grounding: Base your answer primarily on the verified book excerpts provided below. Explicitly cite the passage reference (e.g. [Source 1], [Chapter X]).
-2. Mandatory External Website Citation: If you mention, explain, or contextualize any fact, concept, or historical background that is NOT directly stated in the excerpts below, you MUST cite the exact reputable website source used (e.g. Stanford Encyclopedia of Philosophy [https://plato.stanford.edu], Perseus Digital Library [http://www.perseus.tufts.edu], Internet Encyclopedia of Philosophy [https://iep.utm.edu], or Wikipedia [https://en.wikipedia.org]). Always provide full markdown links.
-3. Dedicated References Section: Conclude your answer with a dedicated section titled:
-### References & Context Sources
-- [Book Excerpt]: (Cite the passage number and book title)
-- [External Website]: [Source Name](https://reputable-site.org/...) (Explain what outside context was verified)
+CORE GROUNDING & CONTEXT PRINCIPLES:
+1. Primary Grounding: Base your answer primarily on the verified book excerpts provided below. Cite the relevant passages (e.g. [Section 1], [Chapter X]).
+2. Necessary Outside Context: You may freely draw upon essential outside context (historical background, philosophical definitions, literary terminology, or clarifying analogies) whenever helpful to explain and illuminate the book's ideas. Do NOT provide external website URLs or website links.
+3. Anti-Hallucination Guardrail: Do NOT invent plot points, fictitious quotes, or false facts not supported by the book. Distinguish clearly between what the author explicitly states in the text and any clarifying context you provide.
+4. Natural, eloquent, and profound: Speak with depth, clarity, and intelligence. Avoid rigid refusals; explain the text meaningfully and help the reader deeply understand the author's thought.
 
 VERIFIED BOOK EXCERPTS:
 {$contextText}";
@@ -179,9 +177,6 @@ VERIFIED BOOK EXCERPTS:
         return "In **{$chapter}**, the author directly examines this theme:\n\n"
              . "> *\"" . substr($text, 0, 360) . (strlen($text) > 360 ? '...' : '') . "\"*\n\n"
              . "The passage highlights the essential Stoic teaching: while external circumstances, human behavior, and the fleeting nature of life remain beyond our direct influence, our inner judgment (*hegemonikon*), moral character, and adherence to reason constitute our true realm of sovereignty.\n\n"
-             . "### References & Context Sources\n"
-             . "• **Verified Book Passage:** {$chapter}\n"
-             . "• **External Website Source:** [Stanford Encyclopedia of Philosophy - Marcus Aurelius](https://plato.stanford.edu/entries/marcus-aurelius/) (Historical context on Stoic psychology and the *hegemonikon*)\n"
-             . "• **External Website Source:** [Internet Encyclopedia of Philosophy - Stoic Ethics](https://iep.utm.edu/stoiceth/) (Philosophical analysis of internal control vs external fate)";
+             . "• **Verified Book Source:** {$chapter}";
     }
 }

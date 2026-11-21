@@ -282,7 +282,7 @@ document.addEventListener('DOMContentLoaded', () => {
     } else {
       emptyGreeting.style.display = 'none';
       session.messages.forEach(m => {
-        renderMessageItem(m.role, m.content, m.citations, m.bookTitle, m.external_sources);
+        renderMessageItem(m.role, m.content, m.citations, m.bookTitle);
       });
       scrollCanvasToBottom();
     }
@@ -405,19 +405,15 @@ document.addEventListener('DOMContentLoaded', () => {
       const answerText = data.answer || 'No answer generated.';
       aiBubble.innerHTML = formatMarkdown(answerText);
 
-      const hasCitations = data.citations && data.citations.length > 0;
-      const hasExternal = data.external_sources && data.external_sources.length > 0;
-
-      if (hasCitations || hasExternal) {
-        const tray = createSourcesTray(data.citations, data.external_sources);
+      if (data.citations && data.citations.length > 0) {
+        const tray = createSourcesTray(data.citations);
         if (tray) aiRow.appendChild(tray);
       }
 
       session.messages.push({
         role: 'ai',
         content: answerText,
-        citations: data.citations || [],
-        external_sources: data.external_sources || []
+        citations: data.citations || []
       });
       saveSessions();
 
@@ -433,7 +429,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // 9. UI Rendering Helpers
-  function renderMessageItem(role, content, citations, bookTitle, externalSources) {
+  function renderMessageItem(role, content, citations, bookTitle) {
     const row = document.createElement('div');
     row.className = `msg-row ${role}`;
 
@@ -452,10 +448,8 @@ document.addEventListener('DOMContentLoaded', () => {
       bubble.innerHTML = formatMarkdown(content);
       row.appendChild(bubble);
 
-      const hasCitations = citations && citations.length > 0;
-      const hasExternal = externalSources && externalSources.length > 0;
-      if (hasCitations || hasExternal) {
-        const tray = createSourcesTray(citations, externalSources);
+      if (citations && citations.length > 0) {
+        const tray = createSourcesTray(citations);
         if (tray) row.appendChild(tray);
       }
     }
@@ -463,20 +457,16 @@ document.addEventListener('DOMContentLoaded', () => {
     messagesContainer.appendChild(row);
   }
 
-  function createSourcesTray(citations, externalSources) {
+  function createSourcesTray(citations) {
     const validCitations = Array.isArray(citations) ? citations : [];
-    const validExternal = Array.isArray(externalSources) ? externalSources : [];
-
-    if (validCitations.length === 0 && validExternal.length === 0) return null;
+    if (validCitations.length === 0) return null;
 
     const tray = document.createElement('div');
     tray.className = 'sources-tray';
 
     const header = document.createElement('div');
     header.className = 'sources-tray-header';
-    const excerptCount = validCitations.length > 0 ? `${validCitations.length} Book Passage${validCitations.length > 1 ? 's' : ''}` : '';
-    const extCount = validExternal.length > 0 ? `${validExternal.length} External Source${validExternal.length > 1 ? 's' : ''}` : '';
-    const labelParts = [excerptCount, extCount].filter(Boolean).join(' &bull; ');
+    const countLabel = `${validCitations.length} Passage${validCitations.length > 1 ? 's' : ''}`;
 
     header.innerHTML = `
       <div style="display: flex; align-items: center; gap: 8px;">
@@ -484,7 +474,7 @@ document.addEventListener('DOMContentLoaded', () => {
           <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
           <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
         </svg>
-        <span>Verified Sources &amp; Citations (${labelParts})</span>
+        <span>Verified Book Sources (${countLabel})</span>
       </div>
       <span class="sources-arrow">&#9662;</span>
     `;
@@ -492,54 +482,19 @@ document.addEventListener('DOMContentLoaded', () => {
     const body = document.createElement('div');
     body.className = 'sources-tray-body';
 
-    if (validCitations.length > 0) {
-      const secTitle = document.createElement('div');
-      secTitle.className = 'sources-section-title';
-      secTitle.textContent = 'VERIFIED BOOK PASSAGES';
-      body.appendChild(secTitle);
-
-      validCitations.forEach((c, idx) => {
-        const card = document.createElement('div');
-        card.className = 'source-excerpt-card';
-        const sim = Math.round((c.similarity || 0.94) * 100);
-        card.innerHTML = `
-          <div class="source-excerpt-header">
-            <span>Passage ${idx + 1} &mdash; ${escapeHtml(c.chapter || 'Excerpt')}</span>
-            <span class="source-similarity">${sim}% Match</span>
-          </div>
-          <div class="source-excerpt-quote">"${escapeHtml(c.text)}"</div>
-        `;
-        body.appendChild(card);
-      });
-    }
-
-    if (validExternal.length > 0) {
-      const secTitle = document.createElement('div');
-      secTitle.className = 'sources-section-title';
-      secTitle.style.marginTop = validCitations.length > 0 ? '12px' : '0';
-      secTitle.textContent = 'EXTERNAL WEB CONTEXT SOURCES';
-      body.appendChild(secTitle);
-
-      validExternal.forEach((s) => {
-        const card = document.createElement('a');
-        card.className = 'source-external-card';
-        card.href = s.url;
-        card.target = '_blank';
-        card.rel = 'noopener noreferrer';
-        card.innerHTML = `
-          <div class="source-external-header">
-            <span>${escapeHtml(s.title || s.host || 'External Reference')}</span>
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
-              <polyline points="15 3 21 3 21 9"></polyline>
-              <line x1="10" y1="14" x2="21" y2="3"></line>
-            </svg>
-          </div>
-          <span class="source-external-url">${escapeHtml(s.url)}</span>
-        `;
-        body.appendChild(card);
-      });
-    }
+    validCitations.forEach((c, idx) => {
+      const card = document.createElement('div');
+      card.className = 'source-excerpt-card';
+      const sim = Math.round((c.similarity || 0.94) * 100);
+      card.innerHTML = `
+        <div class="source-excerpt-header">
+          <span>Passage ${idx + 1} &mdash; ${escapeHtml(c.chapter || 'Excerpt')}</span>
+          <span class="source-similarity">${sim}% Match</span>
+        </div>
+        <div class="source-excerpt-quote">"${escapeHtml(c.text)}"</div>
+      `;
+      body.appendChild(card);
+    });
 
     header.addEventListener('click', () => {
       window.SFX?.playBlip(750, 0.03);

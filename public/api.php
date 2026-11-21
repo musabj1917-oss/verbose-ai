@@ -223,28 +223,11 @@ if ($action === 'query') {
     $citations = $bookService->getGroundedChunks($bookId, $query);
     $result = $aiService->generateGroundedAnswer($query, $bookTitle, $citations, $mode);
 
-    // Extract external website references from answer
-    preg_match_all('/https?:\/\/[^\s\)\],"\']+/', $result['answer'] ?? '', $urlMatches);
-    $externalSources = [];
-    if (!empty($urlMatches[0])) {
-        foreach (array_unique($urlMatches[0]) as $url) {
-            $parsedHost = parse_url($url, PHP_URL_HOST);
-            $cleanHost = preg_replace('/^www\./', '', $parsedHost ?: 'reference');
-            $externalSources[] = [
-                'type' => 'website',
-                'url' => $url,
-                'host' => $cleanHost,
-                'title' => ucwords(str_replace(['.org', '.edu', '.com', '.net'], '', $cleanHost))
-            ];
-        }
-    }
-
     echo json_encode([
         'success' => $result['success'] ?? true,
         'answer' => $result['answer'] ?? '',
         'provider' => $result['provider'] ?? 'Google AI Studio',
-        'citations' => $citations,
-        'external_sources' => $externalSources
+        'citations' => $citations
     ]);
     exit;
 }
