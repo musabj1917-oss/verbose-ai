@@ -5,6 +5,7 @@
  */
 
 require_once __DIR__ . '/../src/Database.php';
+require_once __DIR__ . '/../src/Embedder.php';
 
 echo "=== Verbose AI Admin Book Ingestion ===\n\n";
 
@@ -54,16 +55,40 @@ if (!$pdo) {
     exit(0);
 }
 
+echo "3. Embedding chunks with Gemini (768-dim)...\n";
+$pdo->exec("ALTER TABLE book_chunks ADD COLUMN IF NOT EXISTS embedding vector(768)");
+$embeddings = [];
+foreach (array_chunk(array_keys($chunks), 32) as $keyBatch) {
+    $texts = [];
+    foreach ($keyBatch as $k) {
+        $texts[] = $chunks[$k];
+    }
+    $vecs = null;
+    for ($attempt = 0; $attempt < 4 && !$vecs; $attempt++) {
+        if ($attempt > 0) {
+            sleep(10);
+        }
+        $vecs = Embedder::embedBatch($texts);
+    }
+    if (!$vecs) {
+        echo "Embedding failed (check GEMINI_API_KEY / quota). Aborting so no unembedded book is saved.\n";
+        exit(1);
+    }
+    foreach ($keyBatch as $pos => $k) {
+        $embeddings[$k] = Embedder::toLiteral($vecs[$pos]);
+    }
+}
+
 try {
     $pdo->beginTransaction();
     $stmt = $pdo->prepare("INSERT INTO books (title, author, description, chunks_count, is_active) VALUES (?, ?, ?, ?, true) RETURNING id");
     $stmt->execute([$title, $author, $description, count($chunks)]);
     $bookId = $stmt->fetchColumn();
 
-    $chunkStmt = $pdo->prepare("INSERT INTO book_chunks (book_id, chapter_title, chunk_text, chunk_index) VALUES (?, ?, ?, ?)");
+    $chunkStmt = $pdo->prepare("INSERT INTO book_chunks (book_id, chapter_title, chunk_text, chunk_index, embedding) VALUES (?, ?, ?, ?, CAST(? AS vector))");
     foreach ($chunks as $idx => $chunkText) {
         $chapterTitle = "Section " . ($idx + 1);
-        $chunkStmt->execute([$bookId, $chapterTitle, $chunkText, $idx + 1]);
+        $chunkStmt->execute([$bookId, $chapterTitle, $chunkText, $idx + 1, $embeddings[$idx]]);
     }
 
     $pdo->commit();

@@ -5,6 +5,7 @@
  */
 
 require_once __DIR__ . '/Database.php';
+require_once __DIR__ . '/Embedder.php';
 
 class BookService {
     public function getBooks() {
@@ -58,6 +59,15 @@ class BookService {
             $specificUnit = null;
             if (preg_match('/(?:unit|chapter)\s*(\d+)/i', $cleanQuery, $um)) {
                 $specificUnit = intval($um[1]);
+            }
+
+            // 2b. Semantic (pgvector) retrieval for questions that don't target a specific page/unit.
+            //     Falls through to keyword scoring if embeddings are unavailable.
+            if ($specificPage === null && $specificUnit === null && $cleanQuery !== '') {
+                $semantic = $this->semanticChunks($pdo, $bookId, $cleanQuery);
+                if (!empty($semantic)) {
+                    return $this->formatChunks($semantic);
+                }
             }
 
             // 3. Relevance-Scored Retrieval across all digested pages
@@ -120,6 +130,29 @@ class BookService {
         }
     }
 
+    private function semanticChunks($pdo, $bookId, $query) {
+        try {
+            $vec = Embedder::embedOne($query);
+            if (!$vec) {
+                return [];
+            }
+            $literal = Embedder::toLiteral($vec);
+            $stmt = $pdo->prepare("
+                SELECT id, chapter_title AS chapter, section_number AS section, chunk_text AS text,
+                       1 - (embedding <=> CAST(:q1 AS vector)) AS similarity
+                FROM book_chunks
+                WHERE book_id = :book_id AND embedding IS NOT NULL
+                ORDER BY embedding <=> CAST(:q2 AS vector)
+                LIMIT 6
+            ");
+            $stmt->execute([':q1' => $literal, ':q2' => $literal, ':book_id' => $bookId]);
+            return $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        } catch (Exception $e) {
+            error_log("Semantic retrieval failed: " . $e->getMessage());
+            return [];
+        }
+    }
+
     private function formatChunks($rows) {
         $formatted = [];
         foreach ($rows as $r) {
@@ -134,7 +167,7 @@ class BookService {
                 'chapter' => $chapter,
                 'section' => $r['section'] ?? 1,
                 'text' => $text,
-                'similarity' => 0.94
+                'similarity' => isset($r['similarity']) ? round((float)$r['similarity'], 4) : null
             ];
         }
         return $formatted;

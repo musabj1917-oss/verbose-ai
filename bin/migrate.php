@@ -40,7 +40,9 @@ $queries = [
         embedding vector(768),
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
     );",
-    "CREATE INDEX IF NOT EXISTS idx_book_chunks_book_id ON book_chunks(book_id);"
+    "CREATE INDEX IF NOT EXISTS idx_book_chunks_book_id ON book_chunks(book_id);",
+    "ALTER TABLE book_chunks ADD COLUMN IF NOT EXISTS embedding vector(768);",
+    "CREATE INDEX IF NOT EXISTS idx_book_chunks_embedding ON book_chunks USING hnsw (embedding vector_cosine_ops);"
 ];
 
 foreach ($queries as $idx => $sql) {

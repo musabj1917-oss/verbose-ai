@@ -1,6 +1,7 @@
 <?php
 header('Content-Type: application/json');
 require_once __DIR__ . '/../src/BookService.php';
+require_once __DIR__ . '/../src/Embedder.php';
 require_once __DIR__ . '/../src/AIService.php';
 $action = $_GET['action'] ?? '';
 $bookService = new BookService();
@@ -36,9 +37,12 @@ if ($action === 'migrate') {
             section_number INT DEFAULT 1,
             chunk_text TEXT NOT NULL,
             chunk_index INT DEFAULT 1,
+            embedding vector(768),
             created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
         );");
+        $pdo->exec("ALTER TABLE book_chunks ADD COLUMN IF NOT EXISTS embedding vector(768);");
         $pdo->exec("CREATE INDEX IF NOT EXISTS idx_book_chunks_book_id ON book_chunks(book_id);");
+        $pdo->exec("CREATE INDEX IF NOT EXISTS idx_book_chunks_embedding ON book_chunks USING hnsw (embedding vector_cosine_ops);");
         echo json_encode(['success' => true, 'message' => 'Database schema migrated successfully']);
     } catch (Exception $e) {
         echo json_encode(['success' => false, 'error' => $e->getMessage()]);
@@ -114,18 +118,38 @@ if ($action === 'ingest_book') {
             section_number INT DEFAULT 1,
             chunk_text TEXT NOT NULL,
             chunk_index INT DEFAULT 1,
+            embedding vector(768),
             created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
         );");
+        $pdo->exec("ALTER TABLE book_chunks ADD COLUMN IF NOT EXISTS embedding vector(768);");
+
+        // Embed chunks for semantic search. Time-boxed so a large book can't hit the function timeout;
+        // chunks left without a vector are filled later by bin/backfill_embeddings.php.
+        $embeddings = [];
+        $embedDeadline = microtime(true) + 7.0;
+        foreach (array_chunk(array_keys($chunks), 32) as $keyBatch) {
+            $vecs = null;
+            if (microtime(true) < $embedDeadline) {
+                $texts = [];
+                foreach ($keyBatch as $k) {
+                    $texts[] = $chunks[$k];
+                }
+                $vecs = Embedder::embedBatch($texts);
+            }
+            foreach ($keyBatch as $pos => $k) {
+                $embeddings[$k] = $vecs ? Embedder::toLiteral($vecs[$pos]) : null;
+            }
+        }
 
         $pdo->beginTransaction();
         $stmt = $pdo->prepare("INSERT INTO books (title, author, description, chunks_count, is_active) VALUES (?, ?, ?, ?, true) RETURNING id");
         $stmt->execute([$title, $author, $description, count($chunks)]);
         $bookId = $stmt->fetchColumn();
 
-        $chunkStmt = $pdo->prepare("INSERT INTO book_chunks (book_id, chapter_title, section_number, chunk_text, chunk_index) VALUES (?, ?, ?, ?, ?)");
+        $chunkStmt = $pdo->prepare("INSERT INTO book_chunks (book_id, chapter_title, section_number, chunk_text, chunk_index, embedding) VALUES (?, ?, ?, ?, ?, CAST(? AS vector))");
         foreach ($chunks as $idx => $chunkText) {
             $chapterTitle = "Section " . ($idx + 1);
-            $chunkStmt->execute([$bookId, $chapterTitle, $idx + 1, $chunkText, $idx + 1]);
+            $chunkStmt->execute([$bookId, $chapterTitle, $idx + 1, $chunkText, $idx + 1, $embeddings[$idx] ?? null]);
         }
         $pdo->commit();
 
@@ -134,7 +158,8 @@ if ($action === 'ingest_book') {
             'book_id' => $bookId,
             'title' => $title,
             'author' => $author,
-            'chunks_count' => count($chunks)
+            'chunks_count' => count($chunks),
+            'embedded_chunks' => count(array_filter($embeddings))
         ]);
         exit;
     } catch (Exception $e) {
