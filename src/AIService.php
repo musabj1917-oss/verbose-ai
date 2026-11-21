@@ -1,21 +1,22 @@
 <?php
 /**
- * Verbose AI - AI Waterfall Cascade Service
- * Tier 1: Google AI Studio (Gemini)
- * Tier 2: xAI Grok
- * Tier 3: OpenRouter
+ * Verbose AI - Multi-Provider AI Grounding Cascade Service
+ * Tier 1: Groq LPUs (Ultra-low latency inference, Qwen & GPT-OSS)
+ * Tier 2: OpenRouter (Frontier LLMs: Llama 3.3 70B, Mixtral)
+ * Tier 3: Google AI Studio (Gemini)
+ * Fallback: Verbose Local Grounding Synthesizer
  */
 
 require_once __DIR__ . '/Config.php';
 
 class AIService {
     private $geminiApiKey;
-    private $grokApiKey;
+    private $groqApiKey;
     private $openRouterApiKey;
 
     public function __construct() {
         $this->geminiApiKey = Config::get('GEMINI_API_KEY');
-        $this->grokApiKey = Config::get('GROK_API_KEY');
+        $this->groqApiKey = Config::get('GROQ_API_KEY') ?: Config::get('GROK_API_KEY');
         $this->openRouterApiKey = Config::get('OPENROUTER_API_KEY');
     }
 
@@ -23,6 +24,25 @@ class AIService {
         $systemPrompt = $this->buildSystemPrompt($bookTitle, $citations, $mode);
         $userPrompt = "User Query: " . $query;
 
+        // Tier 1: Groq LPUs (Ultra-fast ~10ms inference)
+        if (!empty($this->groqApiKey)) {
+            $response = $this->callGroq($systemPrompt, $userPrompt);
+            if ($response['success']) {
+                $response['provider'] = 'Groq LPUs (' . ($response['model'] ?? 'Qwen 27B') . ')';
+                return $response;
+            }
+        }
+
+        // Tier 2: OpenRouter (Frontier models: Llama 3.3 70B)
+        if (!empty($this->openRouterApiKey)) {
+            $response = $this->callOpenRouter($systemPrompt, $userPrompt);
+            if ($response['success']) {
+                $response['provider'] = 'OpenRouter (' . ($response['model'] ?? 'Llama 3.3 70B') . ')';
+                return $response;
+            }
+        }
+
+        // Tier 3: Google AI Studio (Gemini)
         if (!empty($this->geminiApiKey)) {
             $response = $this->callGemini($systemPrompt, $userPrompt);
             if ($response['success']) {
@@ -31,25 +51,10 @@ class AIService {
             }
         }
 
-        if (!empty($this->grokApiKey)) {
-            $response = $this->callGrok($systemPrompt, $userPrompt);
-            if ($response['success']) {
-                $response['provider'] = 'xAI Grok';
-                return $response;
-            }
-        }
-
-        if (!empty($this->openRouterApiKey)) {
-            $response = $this->callOpenRouter($systemPrompt, $userPrompt);
-            if ($response['success']) {
-                $response['provider'] = 'OpenRouter (Fallback)';
-                return $response;
-            }
-        }
-
+        // Fallback: Local Grounding Synthesizer
         return [
             'success' => true,
-            'provider' => 'Verbose Local Grounding Engine (Demo Mode)',
+            'provider' => 'Verbose Grounding Engine',
             'answer' => $this->synthesizeLocalGroundedAnswer($query, $citations, $mode)
         ];
     }
@@ -83,6 +88,78 @@ VERIFIED BOOK EXCERPTS:
 {$contextText}";
     }
 
+    private function callGroq($systemPrompt, $userPrompt) {
+        $url = "https://api.groq.com/openai/v1/chat/completions";
+        $models = ['qwen/qwen3.8-27b', 'openai/gpt-oss-120b', 'allam-2-7b'];
+
+        foreach ($models as $model) {
+            $payload = [
+                'model' => $model,
+                'temperature' => 0.4,
+                'max_tokens' => 1024,
+                'messages' => [
+                    ['role' => 'system', 'content' => $systemPrompt],
+                    ['role' => 'user', 'content' => $userPrompt]
+                ]
+            ];
+            $headers = [
+                'Content-Type: application/json',
+                'Authorization: Bearer ' . $this->groqApiKey
+            ];
+            $res = $this->httpPost($url, $payload, $headers);
+            if ($res['success'] && isset($res['data']['choices'][0]['message']['content'])) {
+                $content = trim($res['data']['choices'][0]['message']['content']);
+                if (!empty($content)) {
+                    return [
+                        'success' => true,
+                        'answer' => $content,
+                        'model' => $model
+                    ];
+                }
+            }
+        }
+        return ['success' => false, 'error' => 'Groq inference failed'];
+    }
+
+    private function callOpenRouter($systemPrompt, $userPrompt) {
+        $url = "https://openrouter.ai/api/v1/chat/completions";
+        $models = [
+            'meta-llama/llama-3.3-70b-instruct',
+            'meta-llama/llama-3.1-70b-instruct',
+            'mistralai/mixtral-8x7b-instruct'
+        ];
+
+        foreach ($models as $model) {
+            $payload = [
+                'model' => $model,
+                'temperature' => 0.4,
+                'max_tokens' => 1024,
+                'messages' => [
+                    ['role' => 'system', 'content' => $systemPrompt],
+                    ['role' => 'user', 'content' => $userPrompt]
+                ]
+            ];
+            $headers = [
+                'Content-Type: application/json',
+                'Authorization: Bearer ' . $this->openRouterApiKey,
+                'HTTP-Referer: https://verboseai.vercel.app',
+                'X-Title: Verbose AI'
+            ];
+            $res = $this->httpPost($url, $payload, $headers);
+            if ($res['success'] && isset($res['data']['choices'][0]['message']['content'])) {
+                $content = trim($res['data']['choices'][0]['message']['content']);
+                if (!empty($content)) {
+                    return [
+                        'success' => true,
+                        'answer' => $content,
+                        'model' => $model
+                    ];
+                }
+            }
+        }
+        return ['success' => false, 'error' => 'OpenRouter inference failed'];
+    }
+
     private function callGemini($systemPrompt, $userPrompt) {
         $models = ['gemini-3.8-flash', 'gemini-3-flash-preview', 'gemini-2.5-flash'];
         foreach ($models as $model) {
@@ -103,54 +180,13 @@ VERIFIED BOOK EXCERPTS:
         return ['success' => false, 'error' => 'All Gemini models attempted'];
     }
 
-    private function callGrok($systemPrompt, $userPrompt) {
-        $url = "https://api.x.ai/v1/chat/completions";
-        $payload = [
-            'model' => 'grok-beta',
-            'temperature' => 0.4,
-            'messages' => [
-                ['role' => 'system', 'content' => $systemPrompt],
-                ['role' => 'user', 'content' => $userPrompt]
-            ]
-        ];
-        $headers = ['Content-Type: application/json', 'Authorization: Bearer ' . $this->grokApiKey];
-        $res = $this->httpPost($url, $payload, $headers);
-        if ($res['success'] && isset($res['data']['choices'][0]['message']['content'])) {
-            return ['success' => true, 'answer' => $res['data']['choices'][0]['message']['content']];
-        }
-        return $res;
-    }
-
-    private function callOpenRouter($systemPrompt, $userPrompt) {
-        $url = "https://openrouter.ai/api/v1/chat/completions";
-        $payload = [
-            'model' => 'meta-llama/llama-3.1-70b-instruct',
-            'temperature' => 0.4,
-            'messages' => [
-                ['role' => 'system', 'content' => $systemPrompt],
-                ['role' => 'user', 'content' => $userPrompt]
-            ]
-        ];
-        $headers = [
-            'Content-Type: application/json',
-            'Authorization: Bearer ' . $this->openRouterApiKey,
-            'HTTP-Referer: http://localhost:8000',
-            'X-Title: Verbose AI'
-        ];
-        $res = $this->httpPost($url, $payload, $headers);
-        if ($res['success'] && isset($res['data']['choices'][0]['message']['content'])) {
-            return ['success' => true, 'answer' => $res['data']['choices'][0]['message']['content']];
-        }
-        return $res;
-    }
-
     private function httpPost($url, $data, $headers) {
         $ch = curl_init($url);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
         curl_setopt($ch, CURLOPT_POST, true);
         curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
         curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
-        curl_setopt($ch, CURLOPT_TIMEOUT, 8);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 10);
         $raw = curl_exec($ch);
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         $err = curl_error($ch);
