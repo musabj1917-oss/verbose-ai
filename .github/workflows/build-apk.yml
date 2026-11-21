@@ -27,58 +27,53 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Install Android Build Tools
-        run: |
-          sdkmanager --install "platform-tools" "platforms;android-34" "build-tools;34.0.0"
-
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v3
 
       - name: Build Debug & Release APK
         working-directory: ./android
         run: |
-          chmod +x gradlew || gradle wrapper --gradle-version 8.4
           chmod +x gradlew
           ./gradlew assembleDebug assembleRelease --stacktrace
 
-      - name: Sign Release APK with Debug Keystore
+      - name: Prepare APK outputs
         working-directory: ./android
         run: |
-          # If an unsigned release APK was created, sign it so it installs on any device
-          RELEASE_APK=$(find app/build/outputs/apk/release -name "*.apk" 2>/dev/null | head -n 1)
-          if [ -f "$RELEASE_APK" ]; then
-            echo "Signing release APK: $RELEASE_APK"
-            # Generate temporary signing key if needed
+          mkdir -p output_apks
+          # Find and copy debug APK
+          DEBUG_APK=$(find app/build/outputs/apk/debug -name "*.apk" | head -n 1)
+          if [ -n "$DEBUG_APK" ] && [ -f "$DEBUG_APK" ]; then
+            cp "$DEBUG_APK" output_apks/verbose-ai-debug.apk
+            echo "Copied debug APK"
+          fi
+
+          # Sign release APK with auto-generated keystore so it installs immediately
+          RELEASE_APK=$(find app/build/outputs/apk/release -name "*.apk" | head -n 1)
+          if [ -n "$RELEASE_APK" ] && [ -f "$RELEASE_APK" ]; then
             keytool -genkey -v -keystore release.keystore -alias verbose -keyalg RSA -keysize 2048 -validity 10000 -storepass verbosepass -keypass verbosepass -dname "CN=VerboseAI, OU=Mobile, O=Verbose, L=SanFrancisco, S=CA, C=US"
             jarsigner -verbose -sigalg SHA256withRSA -digestalg SHA-256 -keystore release.keystore -storepass verbosepass -keypass verbosepass "$RELEASE_APK" verbose
-            cp "$RELEASE_APK" app/build/outputs/apk/release/verbose-ai-release.apk
+            cp "$RELEASE_APK" output_apks/verbose-ai-release.apk
+            echo "Signed and copied release APK"
           fi
-          # Also ensure debug APK is named cleanly
-          DEBUG_APK=$(find app/build/outputs/apk/debug -name "*.apk" 2>/dev/null | head -n 1)
-          if [ -f "$DEBUG_APK" ]; then
-            cp "$DEBUG_APK" app/build/outputs/apk/debug/verbose-ai-debug.apk
-          fi
+          ls -la output_apks/
 
       - name: Upload Debug APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: verbose-ai-debug
-          path: android/app/build/outputs/apk/debug/*.apk
+          path: android/output_apks/verbose-ai-debug.apk
           retention-days: 14
 
       - name: Upload Release APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: verbose-ai-release
-          path: android/app/build/outputs/apk/release/*.apk
+          path: android/output_apks/verbose-ai-release.apk
           retention-days: 14
 
       - name: Create GitHub Release with APKs
         uses: softprops/action-gh-release@v2
-        if: startsWith(github.ref, 'refs/tags/') || github.ref == 'refs/heads/main'
+        if: github.ref == 'refs/heads/main'
         with:
           tag_name: v1.0.0-apk
           name: "Verbose AI v1.0.0 Android APK"
@@ -87,13 +82,13 @@ jobs:
 
             Zero-hallucination literary intelligence companion for Android.
 
-            #### Downloads:
-            - **Debug APK (Recommended for instant install)**: [Download `verbose-ai-debug.apk`](https://github.com/${{ github.repository }}/releases/download/v1.0.0-apk/verbose-ai-debug.apk)
-            - **Release APK**: [Download `verbose-ai-release.apk`](https://github.com/${{ github.repository }}/releases/download/v1.0.0-apk/verbose-ai-release.apk)
+            #### Direct APK Downloads:
+            - **[Download verbose-ai-debug.apk](https://github.com/${{ github.repository }}/releases/download/v1.0.0-apk/verbose-ai-debug.apk)** (Instantly installable)
+            - **[Download verbose-ai-release.apk](https://github.com/${{ github.repository }}/releases/download/v1.0.0-apk/verbose-ai-release.apk)**
 
-            *Built automatically with GitHub Actions.*
+            *Built automatically via GitHub Actions CI/CD.*
           files: |
-            android/app/build/outputs/apk/debug/verbose-ai-debug.apk
-            android/app/build/outputs/apk/release/verbose-ai-release.apk
+            android/output_apks/verbose-ai-debug.apk
+            android/output_apks/verbose-ai-release.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
