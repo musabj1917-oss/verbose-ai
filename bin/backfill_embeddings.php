@@ -20,7 +20,7 @@ $done = 0;
 $failures = 0;
 
 while (true) {
-    $rows = $pdo->query("SELECT id, chunk_text FROM book_chunks WHERE embedding IS NULL ORDER BY id LIMIT 32")->fetchAll();
+    $rows = $pdo->query("SELECT id, chunk_text FROM book_chunks WHERE embedding IS NULL ORDER BY id LIMIT 24")->fetchAll();
     if (!$rows) {
         break;
     }
@@ -30,12 +30,12 @@ while (true) {
     }
     $vecs = Embedder::embedBatch($texts);
     if (!$vecs) {
-        if (++$failures >= 10) {
+        if (++$failures >= 15) {
             echo "Giving up after repeated embedding failures (check GEMINI_API_KEY / quota). Embedded so far: {$done}\n";
             exit(1);
         }
-        echo "Embedding rate limit / pause hit. Sleeping 12s (Attempt {$failures}/10)...\n";
-        sleep(12);
+        echo "Embedding rate limit hit. Sleeping 25s (Attempt {$failures}/15)...\n";
+        sleep(25);
         continue;
     }
     $failures = 0;
@@ -44,7 +44,7 @@ while (true) {
         $done++;
     }
     echo "Embedded {$done} chunks...\n";
-    usleep(600000); // 0.6s breathing room to stay well under Gemini RPM
+    sleep(2); // Pacing to remain safely under Gemini RPM quota
 }
 
 echo "Done. Embedded {$done} chunks.\n";
