@@ -211,22 +211,47 @@ if ($action === 'delete_book') {
     exit;
 }
 
-if ($action === 'query') {
+if ($action === 'query' || $action === 'scan_image') {
     $input = json_decode(file_get_contents('php://input'), true);
     $bookId = $input['book_id'] ?? null;
-    $query = trim($input['query'] ?? '');
+    $query = trim($input['query'] ?? $input['prompt'] ?? '');
+    $image = $input['image'] ?? null;
     $mode = $input['mode'] ?? 'ask';
-    $books = $bookService->getBooks();
+
     $activeBook = null;
-    foreach ($books as $b) { if ($b['id'] == $bookId) { $activeBook = $b; break; } }
-    $bookTitle = $activeBook['title'] ?? 'Selected Book';
-    $citations = $bookService->getGroundedChunks($bookId, $query);
+    if (!empty($bookId)) {
+        $books = $bookService->getBooks();
+        foreach ($books as $b) {
+            if ($b['id'] == $bookId) {
+                $activeBook = $b;
+                break;
+            }
+        }
+    }
+
+    $bookTitle = $activeBook ? $activeBook['title'] : null;
+    $citations = $activeBook ? $bookService->getGroundedChunks($bookId, $query) : [];
+
+    // Separate Vision Model for Image Scanning
+    if (!empty($image)) {
+        $result = $aiService->scanImage($image, $query, $bookTitle);
+        echo json_encode([
+            'success' => $result['success'] ?? true,
+            'answer' => $result['answer'] ?? '',
+            'provider' => $result['provider'] ?? 'NVIDIA Nemotron 3.5 Super VL (Vision)',
+            'citations' => [],
+            'has_image' => true
+        ]);
+        exit;
+    }
+
+    // Standard Multi-Provider Grounded Discourse
     $result = $aiService->generateGroundedAnswer($query, $bookTitle, $citations, $mode);
 
     echo json_encode([
         'success' => $result['success'] ?? true,
         'answer' => $result['answer'] ?? '',
-        'provider' => $result['provider'] ?? 'Google AI Studio',
+        'provider' => $result['provider'] ?? 'Verbose AI',
         'citations' => $citations
     ]);
     exit;

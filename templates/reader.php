@@ -93,7 +93,7 @@ $displayName = explode('@', $currentUser)[0];
               <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
               <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
             </svg>
-            <span>Tap <strong>+</strong> to attach a book and begin</span>
+            <span>Ask anything, attach a book for context, or scan an image page</span>
           </div>
         </div>
         <div id="messages-container" style="display: flex; flex-direction: column; gap: 28px; width: 100%;"></div>
@@ -108,23 +108,37 @@ $displayName = explode('@', $currentUser)[0];
           <div id="popover-books-list" style="display: flex; flex-direction: column; gap: 4px;"></div>
         </div>
 
-        <div id="attached-book-pill" class="attached-book-pill" style="display: none;">
-          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
-            <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
-          </svg>
-          <span id="attached-book-label">Book Context</span>
-          <button id="btn-remove-book" class="attached-book-remove" title="Remove book">&times;</button>
+        <div class="attached-pills-row">
+          <div id="attached-book-pill" class="attached-book-pill" style="display: none;">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
+              <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
+            </svg>
+            <span id="attached-book-label">Book Context</span>
+            <button id="btn-remove-book" class="attached-book-remove" title="Remove book">&times;</button>
+          </div>
+          <div id="attached-image-pill" class="attached-image-pill" style="display: none;">
+            <img id="attached-image-thumb" class="attached-image-thumb" src="" alt="Scan">
+            <span id="attached-image-label">Page Scanned</span>
+            <button id="btn-remove-image" class="attached-image-remove" title="Remove image">&times;</button>
+          </div>
         </div>
 
         <div class="input-main-row">
-          <button id="btn-book-plus" class="btn-book-plus" title="Select book">
+          <button id="btn-book-plus" class="btn-book-plus" title="Attach book context">
             <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
               <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
             </svg>
           </button>
-          <textarea id="prompt-input" class="input-textarea" rows="1" placeholder="Ask a question about the book..."></textarea>
+          <input type="file" id="image-scan-input" accept="image/*" style="display: none;">
+          <button id="btn-scan-image" class="btn-scan-image" title="Scan or upload page image">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
+              <circle cx="12" cy="13" r="4"></circle>
+            </svg>
+          </button>
+          <textarea id="prompt-input" class="input-textarea" rows="1" placeholder="Ask a question or scan a page..."></textarea>
           <button id="btn-send-prompt" class="btn-action-send" title="Send" disabled>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
               <line x1="12" y1="19" x2="12" y2="5"></line>

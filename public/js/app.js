@@ -27,6 +27,14 @@ document.addEventListener('DOMContentLoaded', () => {
   const attachedBookLabel = document.getElementById('attached-book-label');
   const btnRemoveBook = document.getElementById('btn-remove-book');
 
+  // Image Scanning Elements
+  const btnScanImage = document.getElementById('btn-scan-image');
+  const imageScanInput = document.getElementById('image-scan-input');
+  const attachedImagePill = document.getElementById('attached-image-pill');
+  const attachedImageThumb = document.getElementById('attached-image-thumb');
+  const attachedImageLabel = document.getElementById('attached-image-label');
+  const btnRemoveImage = document.getElementById('btn-remove-image');
+
   // Dedicated Settings Modal
   const settingsModal = document.getElementById('settings-modal');
   const btnOpenSettings = document.getElementById('btn-open-settings');
@@ -42,7 +50,8 @@ document.addEventListener('DOMContentLoaded', () => {
     selectedBook: null,
     sessions: JSON.parse(localStorage.getItem('verbose_sessions') || '[]'),
     activeSessionId: null,
-    isGenerating: false
+    isGenerating: false,
+    scannedImage: null
   };
 
   // 1. Dynamic Greeting
@@ -107,8 +116,67 @@ document.addEventListener('DOMContentLoaded', () => {
   function updateSendButtonState() {
     if (!promptInput || !btnSend) return;
     const hasText = promptInput.value.trim().length > 0;
-    btnSend.disabled = !hasText || state.isGenerating;
+    const hasImage = !!state.scannedImage;
+    btnSend.disabled = (!hasText && !hasImage) || state.isGenerating;
   }
+
+  // Image Scanning Listener & OCR Image Resizing
+  btnScanImage?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    imageScanInput?.click();
+  });
+
+  imageScanInput?.addEventListener('change', (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = function(evt) {
+      const img = new Image();
+      img.onload = function() {
+        const maxDim = 1280;
+        let width = img.width;
+        let height = img.height;
+        if (width > maxDim || height > maxDim) {
+          if (width > height) {
+            height = Math.round((height * maxDim) / width);
+            width = maxDim;
+          } else {
+            width = Math.round((width * maxDim) / height);
+            height = maxDim;
+          }
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+        const resizedDataUrl = canvas.toDataURL('image/jpeg', 0.88);
+
+        state.scannedImage = resizedDataUrl;
+        if (attachedImageThumb) attachedImageThumb.src = resizedDataUrl;
+        if (attachedImageLabel) {
+          attachedImageLabel.textContent = file.name.length > 18 ? file.name.slice(0, 15) + '...' : file.name;
+        }
+        if (attachedImagePill) attachedImagePill.style.display = 'inline-flex';
+        window.SFX?.playBlip(880, 0.05);
+        updateSendButtonState();
+        promptInput?.focus();
+      };
+      img.src = evt.target.result;
+    };
+    reader.readAsDataURL(file);
+    imageScanInput.value = '';
+  });
+
+  btnRemoveImage?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    state.scannedImage = null;
+    if (attachedImagePill) attachedImagePill.style.display = 'none';
+    if (attachedImageThumb) attachedImageThumb.src = '';
+    window.SFX?.playBlip(400, 0.04);
+    updateSendButtonState();
+  });
 
   ['input', 'keyup', 'change', 'paste', 'compositionend'].forEach(evt => {
     promptInput?.addEventListener(evt, () => {
@@ -152,9 +220,7 @@ document.addEventListener('DOMContentLoaded', () => {
       state.books = [];
     }
     renderPopoverBooks();
-    if (state.books.length > 0 && !state.selectedBook) {
-      attachBook(state.books[0]);
-    }
+    // Do NOT auto-attach the first book. User selects a book only when desired.
   }
 
   // 6. '+' Book Popover Management
@@ -275,7 +341,7 @@ document.addEventListener('DOMContentLoaded', () => {
     } else {
       emptyGreeting.style.display = 'none';
       session.messages.forEach(m => {
-        renderMessageItem(m.role, m.content, m.citations, m.bookTitle);
+        renderMessageItem(m.role, m.content, m.citations, m.bookTitle, m.image, m.provider);
       });
       scrollCanvasToBottom();
     }
@@ -284,20 +350,27 @@ document.addEventListener('DOMContentLoaded', () => {
   // 8. Send Query & Stream Response
   async function handleSend() {
     const text = promptInput.value.trim();
-    if (!text || state.isGenerating) return;
+    const image = state.scannedImage;
+    if ((!text && !image) || state.isGenerating) return;
 
     state.isGenerating = true;
     promptInput.value = '';
     promptInput.style.height = 'auto';
     btnSend.disabled = true;
 
+    // Reset attached image for subsequent messages
+    state.scannedImage = null;
+    if (attachedImagePill) attachedImagePill.style.display = 'none';
+    if (attachedImageThumb) attachedImageThumb.src = '';
+
     window.SFX?.playSend();
 
+    const displayTitle = text || 'Scanned Document';
     let session = state.sessions.find(s => s.id === state.activeSessionId);
     if (!session) {
       session = {
         id: 'session_' + Date.now(),
-        title: text.slice(0, 32),
+        title: displayTitle.slice(0, 32),
         messages: [],
         timestamp: Date.now()
       };
@@ -308,7 +381,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     if (session.messages.length === 0) {
-      session.title = text.slice(0, 32);
+      session.title = displayTitle.slice(0, 32);
       currentChatTitle.textContent = session.title;
       saveSessions();
       renderSessionList();
@@ -316,25 +389,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
     emptyGreeting.style.display = 'none';
 
-    // Auto-attach first book if none selected
-    if (!state.selectedBook) {
-      if (state.books.length > 0) {
-        attachBook(state.books[0]);
-      } else {
-        state.isGenerating = false;
-        renderMessageItem('user', text, null, null);
-        aiBubble.textContent = 'No book context is loaded. Tap the book icon below to select a book from the library.';
-        updateSendButtonState();
-        scrollCanvasToBottom();
-        return;
-      }
-    }
-
     const bookTitle = state.selectedBook ? state.selectedBook.title : null;
+    const userMessageText = text || (image ? 'Analyze this scanned page.' : '');
 
-    // Render User Message
-    renderMessageItem('user', text, null, bookTitle);
-    session.messages.push({ role: 'user', content: text, bookTitle });
+    // Render User Message with image preview if scanned
+    renderMessageItem('user', userMessageText, null, bookTitle, image);
+    session.messages.push({ role: 'user', content: userMessageText, bookTitle, image });
     saveSessions();
     scrollCanvasToBottom();
 
@@ -352,9 +412,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const contemplationWord = document.createElement('span');
     contemplationWord.className = 'contemplation-word';
-    contemplationWord.textContent = state.selectedBook 
-      ? `Contemplating ${state.selectedBook.title}...` 
-      : 'Contemplating book context...';
+    contemplationWord.textContent = image 
+      ? 'Scanning image with Nemotron VL...' 
+      : (state.selectedBook ? `Contemplating ${state.selectedBook.title}...` : 'Contemplating inquiry...');
 
     contemplationBadge.appendChild(orbCanvas);
     contemplationBadge.appendChild(contemplationWord);
@@ -379,7 +439,8 @@ document.addEventListener('DOMContentLoaded', () => {
     try {
       const payload = {
         book_id: state.selectedBook ? state.selectedBook.id : null,
-        query: text,
+        query: userMessageText,
+        image: image || null,
         mode: 'ask'
       };
 
@@ -398,6 +459,13 @@ document.addEventListener('DOMContentLoaded', () => {
       const answerText = data.answer || 'No answer generated.';
       aiBubble.innerHTML = formatMarkdown(answerText);
 
+      if (data.provider) {
+        const provBadge = document.createElement('div');
+        provBadge.className = 'provider-model-badge';
+        provBadge.textContent = data.provider;
+        aiRow.appendChild(provBadge);
+      }
+
       if (data.citations && data.citations.length > 0) {
         const tray = createSourcesTray(data.citations);
         if (tray) aiRow.appendChild(tray);
@@ -406,14 +474,15 @@ document.addEventListener('DOMContentLoaded', () => {
       session.messages.push({
         role: 'ai',
         content: answerText,
-        citations: data.citations || []
+        citations: data.citations || [],
+        provider: data.provider || null
       });
       saveSessions();
 
     } catch (err) {
       inlineOrb?.destroy();
       contemplationBadge.style.display = 'none';
-      aiBubble.textContent = 'Error contacting Verbose AI server. Please check database connection.';
+      aiBubble.textContent = 'Error contacting Verbose AI server. Please verify your connection.';
     } finally {
       state.isGenerating = false;
       updateSendButtonState();
@@ -422,17 +491,30 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // 9. UI Rendering Helpers
-  function renderMessageItem(role, content, citations, bookTitle) {
+  function renderMessageItem(role, content, citations, bookTitle, image, provider) {
     const row = document.createElement('div');
     row.className = `msg-row ${role}`;
 
     if (role === 'user') {
       const bubble = document.createElement('div');
       bubble.className = 'msg-bubble-user';
+      if (image) {
+        const imgEl = document.createElement('img');
+        imgEl.src = image;
+        imgEl.className = 'msg-image-attachment';
+        imgEl.alt = 'Uploaded scan';
+        bubble.appendChild(imgEl);
+      }
       if (bookTitle) {
-        bubble.innerHTML = `<span class="user-book-tag">Book: ${escapeHtml(bookTitle)}</span>${escapeHtml(content)}`;
-      } else {
-        bubble.textContent = content;
+        const tag = document.createElement('span');
+        tag.className = 'user-book-tag';
+        tag.textContent = `Book: ${bookTitle}`;
+        bubble.appendChild(tag);
+      }
+      if (content) {
+        const textNode = document.createElement('div');
+        textNode.textContent = content;
+        bubble.appendChild(textNode);
       }
       row.appendChild(bubble);
     } else {
@@ -440,6 +522,13 @@ document.addEventListener('DOMContentLoaded', () => {
       bubble.className = 'msg-bubble-ai';
       bubble.innerHTML = formatMarkdown(content);
       row.appendChild(bubble);
+
+      if (provider) {
+        const provBadge = document.createElement('div');
+        provBadge.className = 'provider-model-badge';
+        provBadge.textContent = provider;
+        row.appendChild(provBadge);
+      }
 
       if (citations && citations.length > 0) {
         const tray = createSourcesTray(citations);
