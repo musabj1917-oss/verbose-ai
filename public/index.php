@@ -37,6 +37,12 @@ if ($uri === '/api' || $uri === '/api.php') {
     exit;
 }
 
+// MCP Server endpoints (Streamable HTTP / JSON-RPC 2.0)
+if ($uri === '/mcp' || $uri === '/mcp.php' || $uri === '/api/mcp') {
+    require __DIR__ . '/mcp.php';
+    exit;
+}
+
 // Logout endpoint
 if ($uri === '/logout') {
     setcookie('verbose_session', '', time() - 3600, '/');
