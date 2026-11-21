@@ -577,11 +577,12 @@ document.addEventListener('DOMContentLoaded', () => {
     validCitations.forEach((c, idx) => {
       const card = document.createElement('div');
       card.className = 'source-excerpt-card';
-      const sim = Math.round((c.similarity || 0.94) * 100);
+      const hasSim = typeof c.similarity === 'number';
+      const sim = hasSim ? Math.round(Math.max(0, c.similarity) * 100) : 0;
       card.innerHTML = `
         <div class="source-excerpt-header">
           <span>Passage ${idx + 1} &mdash; ${escapeHtml(c.chapter || 'Excerpt')}</span>
-          <span class="source-similarity">${sim}% Match</span>
+          <span class="source-similarity">${hasSim ? sim + '% Match' : 'Excerpt'}</span>
         </div>
         <div class="source-excerpt-quote">"${escapeHtml(c.text)}"</div>
       `;
