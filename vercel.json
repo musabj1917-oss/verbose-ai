@@ -1,20 +1,13 @@
 {
   "version": 2,
   "functions": {
-    "api/**/*.php": {
-      "runtime": "vercel-php@0.7.3"
-    },
-    "public/**/*.php": {
+    "api/*.php": {
       "runtime": "vercel-php@0.7.3"
     }
   },
   "routes": [
     { "src": "/css/(.*)", "dest": "/public/css/$1" },
     { "src": "/js/(.*)", "dest": "/public/js/$1" },
-    { "src": "/login", "dest": "/public/index.php" },
-    { "src": "/signup", "dest": "/public/index.php" },
-    { "src": "/auth", "dest": "/public/index.php" },
-    { "src": "/api(.*)", "dest": "/public/api.php$1" },
-    { "src": "/(.*)", "dest": "/public/index.php" }
+    { "src": "/(.*)", "dest": "/api/index.php" }
   ]
 }
