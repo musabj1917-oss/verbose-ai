@@ -69,15 +69,6 @@ $displayName = explode('@', $currentUser)[0];
       </div>
 
       <div class="top-bar-right">
-        <a href="/admin" class="btn-settings-nav" title="Admin Console" style="text-decoration: none;">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <rect x="3" y="3" width="7" height="7"></rect>
-            <rect x="14" y="3" width="7" height="7"></rect>
-            <rect x="14" y="14" width="7" height="7"></rect>
-            <rect x="3" y="14" width="7" height="7"></rect>
-          </svg>
-          <span>Admin</span>
-        </a>
         <button id="btn-open-settings" class="btn-settings-nav" title="Settings">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <circle cx="12" cy="12" r="3"></circle>
