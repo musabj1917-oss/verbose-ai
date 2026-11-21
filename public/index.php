@@ -1,9 +1,34 @@
 <?php
 $uri = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
 
-// Static assets routing for PHP built-in server
+// Static assets handling (SVG, CSS, JS, Images, Favicon)
 if (preg_match('/\.(?:png|jpg|jpeg|gif|css|js|ico|svg)$/', $uri)) {
+    $staticFile = __DIR__ . $uri;
+    if (file_exists($staticFile) && !is_dir($staticFile)) {
+        $mimes = [
+            'svg' => 'image/svg+xml',
+            'png' => 'image/png',
+            'jpg' => 'image/jpeg',
+            'jpeg' => 'image/jpeg',
+            'gif' => 'image/gif',
+            'css' => 'text/css',
+            'js' => 'application/javascript',
+            'ico' => 'image/x-icon'
+        ];
+        $ext = strtolower(pathinfo($staticFile, PATHINFO_EXTENSION));
+        header('Content-Type: ' . ($mimes[$ext] ?? 'application/octet-stream'));
+        header('Cache-Control: public, max-age=604800, immutable');
+        readfile($staticFile);
+        exit;
+    }
     return false;
+}
+
+if ($uri === '/favicon.ico') {
+    header('Content-Type: image/svg+xml');
+    header('Cache-Control: public, max-age=604800, immutable');
+    readfile(__DIR__ . '/img/logo.svg');
+    exit;
 }
 
 // API endpoints

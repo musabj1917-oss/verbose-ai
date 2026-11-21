@@ -441,8 +441,7 @@ document.addEventListener('DOMContentLoaded', () => {
         book_id: state.selectedBook ? state.selectedBook.id : null,
         query: userMessageText,
         image: image || null,
-        mode: 'ask',
-        stream: !image
+        mode: 'ask'
       };
 
       const res = await fetch('/api.php?action=query', {
@@ -451,53 +450,17 @@ document.addEventListener('DOMContentLoaded', () => {
         body: JSON.stringify(payload)
       });
 
+      const data = await res.json();
+      const fullAnswer = data.answer || 'No answer generated.';
+      const finalProvider = data.provider || 'Verbose AI';
+      const finalCitations = data.citations || [];
+
+      // Transition thinking orb to breathing & hide contemplation badge
       inlineOrb?.setState('breathing');
       contemplationBadge.style.display = 'none';
 
-      let fullAnswer = '';
-      let finalProvider = null;
-      let finalCitations = [];
-
-      const contentType = res.headers.get('content-type') || '';
-      if (contentType.includes('text/event-stream') && res.body) {
-        const reader = res.body.getReader();
-        const decoder = new TextDecoder();
-        let buffer = '';
-
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-
-          buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split('\n');
-          buffer = lines.pop();
-
-          for (const line of lines) {
-            const trimmed = line.trim();
-            if (!trimmed.startsWith('data: ')) continue;
-            const jsonStr = trimmed.slice(6);
-            try {
-              const parsed = JSON.parse(jsonStr);
-              if (parsed.token) {
-                fullAnswer += parsed.token;
-                aiBubble.innerHTML = formatMarkdown(fullAnswer) + '<span class="streaming-cursor"></span>';
-                scrollCanvasToBottom();
-              }
-              if (parsed.done) {
-                if (parsed.provider) finalProvider = parsed.provider;
-                if (parsed.citations) finalCitations = parsed.citations;
-                if (parsed.answer && !fullAnswer) fullAnswer = parsed.answer;
-              }
-            } catch (e) {}
-          }
-        }
-      } else {
-        const data = await res.json();
-        fullAnswer = data.answer || 'No answer generated.';
-        finalProvider = data.provider || null;
-        finalCitations = data.citations || [];
-        await streamTextTypewriter(aiBubble, fullAnswer);
-      }
+      // Write out the complete response line-by-line like ChatGPT and Claude
+      await streamLineByLine(aiBubble, fullAnswer);
 
       // Finalize message display without cursor
       aiBubble.innerHTML = formatMarkdown(fullAnswer);
@@ -636,16 +599,52 @@ document.addEventListener('DOMContentLoaded', () => {
     chatCanvas.scrollTop = chatCanvas.scrollHeight;
   }
 
-  async function streamTextTypewriter(container, text) {
+  // Progressive line-by-line typewriter streaming like ChatGPT & Claude
+  async function streamLineByLine(container, text) {
     if (!text) return;
-    const tokens = text.match(/\S+|\s+/g) || [text];
-    let current = '';
-    const step = 2;
-    for (let i = 0; i < tokens.length; i += step) {
-      current += tokens.slice(i, i + step).join('');
-      container.innerHTML = formatMarkdown(current) + '<span class="streaming-cursor"></span>';
+    const lines = text.split('\n');
+    let displayedText = '';
+    let tickCounter = 0;
+
+    for (let li = 0; li < lines.length; li++) {
+      const line = lines[li];
+      if (line.trim().length === 0) {
+        displayedText += '\n';
+        container.innerHTML = formatMarkdown(displayedText) + '<span class="streaming-cursor"></span>';
+        scrollCanvasToBottom();
+        await new Promise(r => setTimeout(r, 20));
+        continue;
+      }
+
+      // Word / token bursts within each line
+      const tokens = line.match(/\S+|\s+/g) || [line];
+      const step = 2; // Words per pulse
+      for (let wi = 0; wi < tokens.length; wi += step) {
+        const chunk = tokens.slice(wi, wi + step).join('');
+        displayedText += chunk;
+        container.innerHTML = formatMarkdown(displayedText) + '<span class="streaming-cursor"></span>';
+        scrollCanvasToBottom();
+
+        // Optional mechanical sound tick on burst
+        tickCounter++;
+        if (tickCounter % 3 === 0) {
+          window.SFX?.playKeyTick();
+        }
+
+        // Natural typing cadence (faster for regular words, subtle pause on punctuation)
+        let delay = 14;
+        if (chunk.includes('.') || chunk.includes('!') || chunk.includes('?')) {
+          delay = 32;
+        } else if (chunk.includes(',') || chunk.includes(';') || chunk.includes(':')) {
+          delay = 22;
+        }
+        await new Promise(r => setTimeout(r, delay));
+      }
+
+      displayedText += '\n';
+      container.innerHTML = formatMarkdown(displayedText) + '<span class="streaming-cursor"></span>';
       scrollCanvasToBottom();
-      await new Promise(r => setTimeout(r, 14));
+      await new Promise(r => setTimeout(r, 28)); // Line break pause like Claude/ChatGPT
     }
   }
 
