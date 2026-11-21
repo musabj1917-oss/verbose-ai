@@ -95,13 +95,23 @@ class AIService {
     /**
      * Image Scanning & Document OCR using dedicated Vision-Language Models
      */
-    public function scanImage($imageDataUrl, $userPrompt = '', $bookTitle = null) {
+    public function scanImage($imageDataUrl, $userPrompt = '', $bookTitle = null, $citations = []) {
+        $contextSnippet = "";
+        if (!empty($citations)) {
+            $contextSnippet .= "\n\nVERIFIED BOOK CONTEXT EXCERPTS:\n";
+            foreach ($citations as $idx => $c) {
+                $ref = $c['chapter'] ?? ('Passage ' . ($idx + 1));
+                $contextSnippet .= "[{$ref}]\n" . substr($c['text'], 0, 500) . "\n\n";
+            }
+        }
+
         $systemInstruction = "You are Verbose AI's Vision & Document Intelligence Engine.
 You examine scanned book pages, manuscripts, excerpts, and images with extreme optical precision.
 Tasks:
-1. Optical Transcription: If text, handwriting, or printed passages are visible, accurately transcribe the key excerpts.
+1. Optical Transcription: If text, handwriting, or printed passages are visible, accurately transcribe the key excerpts verbatim.
 2. Conceptual & Philosophical Analysis: Explain the meaning, literary nuances, philosophical significance, or historical context of what appears on the page.
-3. Natural eloquence: Present your response in clean markdown with headers and quotes. Distinguish between verbatim transcribed text and your analysis.";
+3. Explicit Context Utilization: If book context excerpts are provided below, directly cross-reference and synthesize the scanned image with that context.
+4. Natural eloquence: Present your response in clean markdown with clear headers. Distinguish between verbatim transcribed text and your analysis." . $contextSnippet;
 
         $query = !empty($userPrompt) ? $userPrompt : "Scan and analyze this page or image. Transcribe any visible text and provide deep literary and conceptual analysis.";
         if (!empty($bookTitle)) {
@@ -134,7 +144,9 @@ Tasks:
                         ]
                     ],
                     'temperature' => 0.2,
-                    'max_tokens' => 4096
+                    'max_tokens' => 4096,
+                    'include_reasoning' => false,
+                    'reasoning' => ['effort' => 'none']
                 ];
                 $headers = [
                     'Content-Type: application/json',
@@ -146,9 +158,13 @@ Tasks:
                 if ($res['success'] && isset($res['data']['choices'][0]['message'])) {
                     $msg = $res['data']['choices'][0]['message'];
                     $content = trim($msg['content'] ?? '');
-                    if (empty($content) && !empty($msg['reasoning'])) {
-                        $content = trim($msg['reasoning']);
+                    $reasoning = trim($msg['reasoning'] ?? '');
+
+                    // Encapsulate any reasoning tokens in a <think> block for structured Claude-style presentation
+                    if (!empty($reasoning)) {
+                        $content = "<think>\n" . $reasoning . "\n</think>\n\n" . $content;
                     }
+
                     if (!empty($content)) {
                         $shortName = strpos($model, 'nano') !== false ? 'NVIDIA Nemotron 3 Nano Omni (Vision)' : 'NVIDIA Nemotron 3.5 Super VL (Vision)';
                         return [
@@ -232,7 +248,7 @@ VERIFIED BOOK EXCERPTS:
 Book: \"{$bookTitle}\"
 
 CORE GROUNDING & CONTEXT PRINCIPLES:
-1. Primary Grounding: Base your answer primarily on the verified book excerpts provided below. Cite the relevant passages (e.g. [Section 1], [Chapter X]).
+1. Explicit Context Utilization: Read the verified book excerpts below with absolute care. You MUST directly cite and synthesize specific quotes, facts, and passages from these excerpts (e.g. [Page X] or [Source Y]) to substantiate your answer. Do not ignore the provided context.
 2. Necessary Outside Context: You may freely draw upon essential outside context (historical background, philosophical definitions, literary terminology, or clarifying analogies) whenever helpful to explain and illuminate the book's ideas. Do NOT provide external website URLs or website links.
 3. Anti-Hallucination Guardrail: Do NOT invent plot points, fictitious quotes, or false facts not supported by the book. Distinguish clearly between what the author explicitly states in the text and any clarifying context you provide.
 4. Natural, eloquent, and profound: Speak with depth, clarity, and intelligence. Avoid rigid refusals; explain the text meaningfully and help the reader deeply understand the author's thought.

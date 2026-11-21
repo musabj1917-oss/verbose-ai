@@ -235,12 +235,12 @@ if ($action === 'query' || $action === 'scan_image') {
 
     // Separate Vision Model for Image Scanning
     if (!empty($image)) {
-        $result = $aiService->scanImage($image, $query, $bookTitle);
+        $result = $aiService->scanImage($image, $query, $bookTitle, $citations);
         echo json_encode([
             'success' => $result['success'] ?? true,
             'answer' => $result['answer'] ?? '',
             'provider' => $result['provider'] ?? 'NVIDIA Nemotron 3.5 Super VL (Vision)',
-            'citations' => [],
+            'citations' => $citations,
             'has_image' => true
         ]);
         exit;

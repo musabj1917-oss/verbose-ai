@@ -513,6 +513,89 @@ body {
   color: var(--text-main);
 }
 
+/* Claude-Style Collapsible Thought Process Dropdown */
+.thought-dropdown {
+  margin-bottom: 14px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-card);
+  overflow: hidden;
+  transition: border-color 0.15s ease;
+}
+
+.thought-dropdown:hover {
+  border-color: var(--border-medium);
+}
+
+.thought-summary {
+  padding: 8px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.72rem;
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+  cursor: pointer;
+  user-select: none;
+  background: var(--bg-card);
+  transition: background 0.15s ease, color 0.15s ease;
+  list-style: none;
+}
+
+.thought-summary::-webkit-details-marker {
+  display: none;
+}
+
+.thought-summary::marker {
+  display: none;
+}
+
+.thought-summary:hover {
+  background: var(--bg-hover);
+  color: var(--text-main);
+}
+
+.thought-summary-left {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.thought-icon {
+  color: var(--text-dim);
+  opacity: 0.8;
+  flex-shrink: 0;
+}
+
+.thought-label {
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.thought-arrow {
+  font-size: 0.75rem;
+  color: var(--text-dim);
+  transition: transform 0.2s ease;
+}
+
+details.thought-dropdown[open] .thought-arrow {
+  transform: rotate(180deg);
+}
+
+.thought-content {
+  padding: 12px 14px;
+  border-top: 1px solid var(--border-subtle);
+  font-family: var(--font-mono);
+  font-size: 0.76rem;
+  line-height: 1.6;
+  color: var(--text-dim);
+  background: var(--bg-page);
+  max-height: 260px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 /* Collapsible Sources Tray */
 .sources-tray {
   margin-top: 14px;

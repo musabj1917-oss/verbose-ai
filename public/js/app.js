@@ -288,6 +288,9 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!bookPopover.contains(e.target) && e.target !== btnBookPlus) {
       closePopover();
     }
+    if (e.target.closest('.thought-summary')) {
+      window.SFX?.playBlip(720, 0.03);
+    }
   });
 
   // 7. Chat Sessions & History Management
@@ -648,9 +651,34 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
+  function renderThoughtAccordion(thoughtText, isOpen) {
+    if (!thoughtText) return '';
+    const cleanThought = escapeHtml(thoughtText).replace(/\n/g, '<br>');
+    return `<details class="thought-dropdown"${isOpen ? ' open' : ''}><summary class="thought-summary"><div class="thought-summary-left"><svg class="thought-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg><span class="thought-label">Thought Process</span></div><span class="thought-arrow">&#9662;</span></summary><div class="thought-content">${cleanThought}</div></details>`;
+  }
+
   function formatMarkdown(text) {
     if (!text) return '';
-    return escapeHtml(text)
+
+    let thoughtHtml = '';
+    let mainText = text;
+
+    // Check for thinking tokens: <think> ... </think> or unclosed <think> ...
+    const thinkClosedRegex = /<think>([\s\S]*?)<\/think>/i;
+    const closedMatch = mainText.match(thinkClosedRegex);
+    if (closedMatch) {
+      thoughtHtml = renderThoughtAccordion(closedMatch[1].trim(), false);
+      mainText = mainText.replace(thinkClosedRegex, '').trim();
+    } else {
+      const thinkOpenRegex = /<think>([\s\S]*)$/i;
+      const openMatch = mainText.match(thinkOpenRegex);
+      if (openMatch) {
+        thoughtHtml = renderThoughtAccordion(openMatch[1].trim(), true);
+        mainText = mainText.replace(thinkOpenRegex, '').trim();
+      }
+    }
+
+    const formattedBody = escapeHtml(mainText)
       .replace(/^### (.*$)/gim, '<h3>$1</h3>')
       .replace(/^## (.*$)/gim, '<h2>$1</h2>')
       .replace(/^# (.*$)/gim, '<h1>$1</h1>')
@@ -660,6 +688,8 @@ document.addEventListener('DOMContentLoaded', () => {
       .replace(/\[(.*?)\]\((https?:\/\/[^\s\)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer" class="chat-external-link">$1 <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline-block;vertical-align:middle;margin-left:2px;"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg></a>')
       .replace(/\n\n/g, '</p><p>')
       .replace(/\n/g, '<br>');
+
+    return thoughtHtml + (formattedBody ? `<p>${formattedBody}</p>` : '');
   }
 
   function escapeHtml(str) {
