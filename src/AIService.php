@@ -20,7 +20,7 @@ class AIService {
         $this->openRouterApiKey = Config::get('OPENROUTER_API_KEY');
     }
 
-    public function generateGroundedAnswer($query, $bookTitle, $citations, $mode = 'ask', $scannedTranscription = null) {
+    public function generateGroundedAnswer($query, $bookTitle, $citations, $mode = 'ask', $scannedTranscription = null, $history = []) {
         $systemPrompt = $this->buildSystemPrompt($bookTitle, $citations, $mode, $scannedTranscription);
         $userPrompt = "User Query: " . $query;
         if (!empty($scannedTranscription)) {
@@ -29,7 +29,7 @@ class AIService {
 
         // Tier 1: Groq LPUs (Ultra-fast ~10ms inference)
         if (!empty($this->groqApiKey)) {
-            $response = $this->callGroq($systemPrompt, $userPrompt);
+            $response = $this->callGroq($systemPrompt, $userPrompt, $history);
             if ($response['success']) {
                 $response['provider'] = 'Groq LPUs (' . ($response['model'] ?? 'Qwen 27B') . ')';
                 return $response;
@@ -38,7 +38,7 @@ class AIService {
 
         // Tier 2: OpenRouter (Frontier models: Llama 3.3 70B)
         if (!empty($this->openRouterApiKey)) {
-            $response = $this->callOpenRouter($systemPrompt, $userPrompt);
+            $response = $this->callOpenRouter($systemPrompt, $userPrompt, $history);
             if ($response['success']) {
                 $response['provider'] = 'OpenRouter (' . ($response['model'] ?? 'Llama 3.3 70B') . ')';
                 return $response;
@@ -47,7 +47,7 @@ class AIService {
 
         // Tier 3: Google AI Studio (Gemini)
         if (!empty($this->geminiApiKey)) {
-            $response = $this->callGemini($systemPrompt, $userPrompt);
+            $response = $this->callGemini($systemPrompt, $userPrompt, $history);
             if ($response['success']) {
                 $response['provider'] = 'Google AI Studio (Gemini)';
                 return $response;
@@ -65,7 +65,7 @@ class AIService {
     /**
      * Real-time Token Streaming Grounded Answer
      */
-    public function streamGroundedAnswer($query, $bookTitle, $citations, $mode = 'ask', $onToken = null, $scannedTranscription = null) {
+    public function streamGroundedAnswer($query, $bookTitle, $citations, $mode = 'ask', $onToken = null, $scannedTranscription = null, $history = []) {
         $systemPrompt = $this->buildSystemPrompt($bookTitle, $citations, $mode, $scannedTranscription);
         $userPrompt = "User Query: " . $query;
         if (!empty($scannedTranscription)) {
@@ -74,7 +74,7 @@ class AIService {
 
         // Tier 1: Groq streaming
         if (!empty($this->groqApiKey)) {
-            $response = $this->callGroqStream($systemPrompt, $userPrompt, $onToken);
+            $response = $this->callGroqStream($systemPrompt, $userPrompt, $onToken, $history);
             if ($response['success']) {
                 $response['provider'] = 'Groq LPUs (' . ($response['model'] ?? 'Qwen 27B') . ')';
                 return $response;
@@ -83,7 +83,7 @@ class AIService {
 
         // Tier 2: OpenRouter streaming
         if (!empty($this->openRouterApiKey)) {
-            $response = $this->callOpenRouterStream($systemPrompt, $userPrompt, $onToken);
+            $response = $this->callOpenRouterStream($systemPrompt, $userPrompt, $onToken, $history);
             if ($response['success']) {
                 $response['provider'] = 'OpenRouter (' . ($response['model'] ?? 'Llama 3.3 70B') . ')';
                 return $response;
@@ -91,7 +91,7 @@ class AIService {
         }
 
         // Fallback: Non-streaming cascade
-        $fallback = $this->generateGroundedAnswer($query, $bookTitle, $citations, $mode, $scannedTranscription);
+        $fallback = $this->generateGroundedAnswer($query, $bookTitle, $citations, $mode, $scannedTranscription, $history);
         if (is_callable($onToken) && !empty($fallback['answer'])) {
             $onToken($fallback['answer']);
         }
@@ -294,19 +294,48 @@ CORE GROUNDING & CONTEXT PRINCIPLES:
 " . (!empty($contextText) ? "VERIFIED BOOK EXCERPTS:\n{$contextText}" : "");
     }
 
-    private function callGroq($systemPrompt, $userPrompt) {
+    /**
+     * Builds standard multi-turn OpenAI-compatible chat messages array
+     * incorporating past conversation history, stripped of internal thinking tags.
+     */
+    private function buildChatMessages($systemPrompt, $userPrompt, $history = []) {
+        $messages = [
+            ['role' => 'system', 'content' => $systemPrompt]
+        ];
+
+        if (!empty($history) && is_array($history)) {
+            $recentHistory = array_slice($history, -10);
+            foreach ($recentHistory as $turn) {
+                if (!isset($turn['role'], $turn['content'])) continue;
+                $role = ($turn['role'] === 'ai' || $turn['role'] === 'assistant') ? 'assistant' : 'user';
+                $cleanContent = trim(preg_replace('/<think>[\s\S]*?<\/think>/i', '', $turn['content']));
+                if (empty($cleanContent)) continue;
+                if (mb_strlen($cleanContent, 'UTF-8') > 1500) {
+                    $cleanContent = mb_substr($cleanContent, 0, 1500, 'UTF-8') . '...';
+                }
+                $messages[] = [
+                    'role' => $role,
+                    'content' => $cleanContent
+                ];
+            }
+        }
+
+        $messages[] = ['role' => 'user', 'content' => $userPrompt];
+        return $messages;
+    }
+
+    private function callGroq($systemPrompt, $userPrompt, $history = []) {
         $url = "https://api.groq.com/openai/v1/chat/completions";
         $models = ['qwen/qwen3.8-27b', 'openai/gpt-oss-120b', 'allam-2-7b'];
+
+        $messages = $this->buildChatMessages($systemPrompt, $userPrompt, $history);
 
         foreach ($models as $model) {
             $payload = [
                 'model' => $model,
                 'temperature' => 0.4,
                 'max_tokens' => 4096,
-                'messages' => [
-                    ['role' => 'system', 'content' => $systemPrompt],
-                    ['role' => 'user', 'content' => $userPrompt]
-                ]
+                'messages' => $messages
             ];
             $headers = [
                 'Content-Type: application/json',
@@ -327,9 +356,11 @@ CORE GROUNDING & CONTEXT PRINCIPLES:
         return ['success' => false, 'error' => 'Groq inference failed'];
     }
 
-    private function callGroqStream($systemPrompt, $userPrompt, $onToken) {
+    private function callGroqStream($systemPrompt, $userPrompt, $onToken, $history = []) {
         $url = "https://api.groq.com/openai/v1/chat/completions";
         $models = ['qwen/qwen3.8-27b', 'openai/gpt-oss-120b', 'allam-2-7b'];
+
+        $messages = $this->buildChatMessages($systemPrompt, $userPrompt, $history);
 
         foreach ($models as $model) {
             $accumulated = "";
@@ -338,10 +369,7 @@ CORE GROUNDING & CONTEXT PRINCIPLES:
                 'temperature' => 0.4,
                 'max_tokens' => 4096,
                 'stream' => true,
-                'messages' => [
-                    ['role' => 'system', 'content' => $systemPrompt],
-                    ['role' => 'user', 'content' => $userPrompt]
-                ]
+                'messages' => $messages
             ];
             $headers = [
                 'Content-Type: application/json',
@@ -359,7 +387,7 @@ CORE GROUNDING & CONTEXT PRINCIPLES:
         return ['success' => false];
     }
 
-    private function callOpenRouter($systemPrompt, $userPrompt) {
+    private function callOpenRouter($systemPrompt, $userPrompt, $history = []) {
         $url = "https://openrouter.ai/api/v1/chat/completions";
         $models = [
             'meta-llama/llama-3.3-70b-instruct',
@@ -367,15 +395,14 @@ CORE GROUNDING & CONTEXT PRINCIPLES:
             'mistralai/mixtral-8x7b-instruct'
         ];
 
+        $messages = $this->buildChatMessages($systemPrompt, $userPrompt, $history);
+
         foreach ($models as $model) {
             $payload = [
                 'model' => $model,
                 'temperature' => 0.4,
                 'max_tokens' => 4096,
-                'messages' => [
-                    ['role' => 'system', 'content' => $systemPrompt],
-                    ['role' => 'user', 'content' => $userPrompt]
-                ]
+                'messages' => $messages
             ];
             $headers = [
                 'Content-Type: application/json',
@@ -398,12 +425,14 @@ CORE GROUNDING & CONTEXT PRINCIPLES:
         return ['success' => false, 'error' => 'OpenRouter inference failed'];
     }
 
-    private function callOpenRouterStream($systemPrompt, $userPrompt, $onToken) {
+    private function callOpenRouterStream($systemPrompt, $userPrompt, $onToken, $history = []) {
         $url = "https://openrouter.ai/api/v1/chat/completions";
         $models = [
             'meta-llama/llama-3.3-70b-instruct',
             'meta-llama/llama-3.1-70b-instruct'
         ];
+
+        $messages = $this->buildChatMessages($systemPrompt, $userPrompt, $history);
 
         foreach ($models as $model) {
             $accumulated = "";
@@ -412,10 +441,7 @@ CORE GROUNDING & CONTEXT PRINCIPLES:
                 'temperature' => 0.4,
                 'max_tokens' => 4096,
                 'stream' => true,
-                'messages' => [
-                    ['role' => 'system', 'content' => $systemPrompt],
-                    ['role' => 'user', 'content' => $userPrompt]
-                ]
+                'messages' => $messages
             ];
             $headers = [
                 'Content-Type: application/json',
@@ -435,13 +461,36 @@ CORE GROUNDING & CONTEXT PRINCIPLES:
         return ['success' => false];
     }
 
-    private function callGemini($systemPrompt, $userPrompt) {
+    private function callGemini($systemPrompt, $userPrompt, $history = []) {
         $models = ['gemini-3.8-flash', 'gemini-3-flash-preview', 'gemini-2.5-flash'];
+
+        $contents = [];
+        if (!empty($history) && is_array($history)) {
+            $recent = array_slice($history, -10);
+            foreach ($recent as $turn) {
+                if (!isset($turn['role'], $turn['content'])) continue;
+                $gRole = ($turn['role'] === 'ai' || $turn['role'] === 'assistant') ? 'model' : 'user';
+                $clean = trim(preg_replace('/<think>[\s\S]*?<\/think>/i', '', $turn['content']));
+                if (empty($clean)) continue;
+                if (mb_strlen($clean, 'UTF-8') > 1500) {
+                    $clean = mb_substr($clean, 0, 1500, 'UTF-8') . '...';
+                }
+                $contents[] = [
+                    'role' => $gRole,
+                    'parts' => [['text' => $clean]]
+                ];
+            }
+        }
+        $contents[] = [
+            'role' => 'user',
+            'parts' => [['text' => $userPrompt]]
+        ];
+
         foreach ($models as $model) {
             $url = "https://generativelanguage.googleapis.com/v1beta/models/{$model}:generateContent?key=" . urlencode($this->geminiApiKey);
             $payload = [
                 'system_instruction' => ['parts' => [['text' => $systemPrompt]]],
-                'contents' => [['role' => 'user', 'parts' => [['text' => $userPrompt]]]],
+                'contents' => $contents,
                 'generationConfig' => [
                     'temperature' => 0.4,
                     'maxOutputTokens' => 4096

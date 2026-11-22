@@ -37,14 +37,16 @@
     .auth-card {
       width: 100%;
       max-width: 400px;
-      background: var(--bg-card);
-      border: 1px solid var(--border-medium);
+      background: rgba(14, 14, 18, 0.78);
+      backdrop-filter: blur(28px) saturate(190%);
+      -webkit-backdrop-filter: blur(28px) saturate(190%);
+      border: 1px solid rgba(255, 255, 255, 0.13);
       border-radius: var(--radius-md);
       padding: 32px;
       display: flex;
       flex-direction: column;
       gap: 24px;
-      box-shadow: 0 32px 80px rgba(0, 0, 0, 0.98);
+      box-shadow: 0 32px 80px rgba(0, 0, 0, 0.98), inset 0 1px 1px 0 rgba(255, 255, 255, 0.16);
       position: relative;
       z-index: 1;
     }
@@ -251,7 +253,6 @@
         if (data.success) {
           window.SFX?.playReplyChime();
           const userEmail = (data.user && data.user.email) ? data.user.email : email;
-          document.cookie = "verbose_session=" + encodeURIComponent(userEmail) + "; path=/; max-age=2592000; SameSite=Lax";
           localStorage.setItem('verbose_user', JSON.stringify({ email: userEmail }));
           window.location.href = '/app';
         } else {

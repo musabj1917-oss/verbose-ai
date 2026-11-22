@@ -37,6 +37,8 @@ if ($uri === '/api' || $uri === '/api.php') {
     exit;
 }
 
+require_once __DIR__ . '/../src/AuthService.php';
+
 // MCP Server endpoints (Streamable HTTP / JSON-RPC 2.0)
 if ($uri === '/mcp' || $uri === '/mcp.php' || $uri === '/api/mcp') {
     require __DIR__ . '/mcp.php';
@@ -45,20 +47,26 @@ if ($uri === '/mcp' || $uri === '/mcp.php' || $uri === '/api/mcp') {
 
 // Logout endpoint
 if ($uri === '/logout') {
-    setcookie('verbose_session', '', time() - 3600, '/');
+    AuthService::clearSession();
     header('Location: /login');
     exit;
 }
 
 // Dedicated Auth pages
 if ($uri === '/login' || $uri === '/signup' || $uri === '/auth') {
+    if (AuthService::getCurrentUser()) {
+        header('Location: /');
+        exit;
+    }
     require __DIR__ . '/../templates/auth.php';
     exit;
 }
 
-// Admin Panel - requires login
+$currentUser = AuthService::getCurrentUser();
+
+// Admin Panel - requires verified session
 if ($uri === '/admin' || $uri === '/admin.php') {
-    if (empty($_COOKIE['verbose_session'])) {
+    if (!$currentUser) {
         header('Location: /login');
         exit;
     }
@@ -66,9 +74,9 @@ if ($uri === '/admin' || $uri === '/admin.php') {
     exit;
 }
 
-// Direct app/reader access - requires login
+// Direct app/reader access - requires verified session
 if ($uri === '/app' || $uri === '/reader') {
-    if (empty($_COOKIE['verbose_session'])) {
+    if (!$currentUser) {
         header('Location: /login');
         exit;
     }
@@ -77,7 +85,7 @@ if ($uri === '/app' || $uri === '/reader') {
 }
 
 // Root entrypoint: FIRST page MUST be login if not authenticated
-if (empty($_COOKIE['verbose_session'])) {
+if (!$currentUser) {
     require __DIR__ . '/../templates/auth.php';
     exit;
 }

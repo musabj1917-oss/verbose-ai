@@ -1,9 +1,12 @@
 <?php
-if (empty($_COOKIE['verbose_session'])) {
+require_once __DIR__ . '/../src/AuthService.php';
+$auth = AuthService::getCurrentUser();
+if (!$auth) {
     header('Location: /login');
     exit;
 }
-$currentUser = htmlspecialchars($_COOKIE['verbose_session'] ?? 'Reader');
+$userEmail = is_array($auth) ? ($auth['email'] ?? '') : (string)$auth;
+$currentUser = htmlspecialchars($userEmail ?: 'Reader');
 $displayName = explode('@', $currentUser)[0];
 ?>
 <!DOCTYPE html>
@@ -56,7 +59,7 @@ $displayName = explode('@', $currentUser)[0];
     <canvas id="starfield-canvas" class="starfield-canvas"></canvas>
 
     <!-- Top Bar -->
-    <header class="top-bar">
+    <header class="top-bar liquid-glass">
       <div class="top-bar-left">
         <button id="btn-toggle-sidebar" class="btn-icon" title="Toggle Sidebar">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -102,10 +105,20 @@ $displayName = explode('@', $currentUser)[0];
 
     <!-- Floating Input Dock -->
     <div class="bottom-dock">
-      <div class="input-capsule">
-        <div id="book-popover" class="book-popover">
-          <div class="popover-header">Select Book for Context</div>
-          <div id="popover-books-list" style="display: flex; flex-direction: column; gap: 4px;"></div>
+      <div class="input-capsule liquid-glass">
+        <div id="book-popover" class="book-popover liquid-glass">
+          <div class="popover-header">
+            <span>Select Book for Context</span>
+            <span id="popover-book-count" class="popover-badge">0</span>
+          </div>
+          <div class="popover-search-box">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="11" cy="11" r="8"></circle>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+            </svg>
+            <input type="text" id="popover-book-search" class="popover-search-input" placeholder="Search books..." autocomplete="off">
+          </div>
+          <div id="popover-books-list" class="popover-books-list"></div>
         </div>
 
         <div class="attached-pills-row">
@@ -152,7 +165,7 @@ $displayName = explode('@', $currentUser)[0];
 
   <!-- Settings Modal -->
   <div id="settings-modal" class="modal-backdrop">
-    <div class="modal-dialog">
+    <div class="modal-dialog liquid-glass">
       <div class="modal-dialog-header">
         <div style="display: flex; align-items: center; gap: 10px;">
           <img src="/img/logo.svg" style="width: 20px; height: 20px;" alt="">

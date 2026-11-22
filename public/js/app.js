@@ -23,6 +23,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const btnBookPlus = document.getElementById('btn-book-plus');
   const bookPopover = document.getElementById('book-popover');
   const popoverBooksList = document.getElementById('popover-books-list');
+  const popoverBookSearch = document.getElementById('popover-book-search');
+  const popoverBookCount = document.getElementById('popover-book-count');
   const attachedBookPill = document.getElementById('attached-book-pill');
   const attachedBookLabel = document.getElementById('attached-book-label');
   const btnRemoveBook = document.getElementById('btn-remove-book');
@@ -223,25 +225,48 @@ document.addEventListener('DOMContentLoaded', () => {
     // Do NOT auto-attach the first book. User selects a book only when desired.
   }
 
-  // 6. '+' Book Popover Management
-  function renderPopoverBooks() {
+  // 6. '+' Book Popover Management (Compact Scrollable Window with Search)
+  function renderPopoverBooks(filterText = '') {
     if (!popoverBooksList) return;
     popoverBooksList.innerHTML = '';
 
+    const query = filterText.toLowerCase().trim();
+    const filtered = state.books.filter(b => {
+      if (!query) return true;
+      const title = (b.title || '').toLowerCase();
+      const author = (b.author || '').toLowerCase();
+      return title.includes(query) || author.includes(query);
+    });
+
+    if (popoverBookCount) {
+      popoverBookCount.textContent = filtered.length;
+    }
+
     if (state.books.length === 0) {
       const emptyItem = document.createElement('div');
-      emptyItem.style.cssText = 'padding: 14px 10px; font-size: 0.75rem; color: var(--text-muted); line-height: 1.6; font-family: var(--font-mono);';
+      emptyItem.style.cssText = 'padding: 16px 12px; font-size: 0.74rem; color: var(--text-muted); line-height: 1.6; font-family: var(--font-mono); text-align: center;';
       emptyItem.textContent = 'No books in library. Contact your administrator to add books.';
       popoverBooksList.appendChild(emptyItem);
       return;
     }
 
-    state.books.forEach((b) => {
+    if (filtered.length === 0) {
+      const emptyItem = document.createElement('div');
+      emptyItem.style.cssText = 'padding: 16px 12px; font-size: 0.74rem; color: var(--text-muted); line-height: 1.6; font-family: var(--font-mono); text-align: center;';
+      emptyItem.textContent = 'No matching books found.';
+      popoverBooksList.appendChild(emptyItem);
+      return;
+    }
+
+    filtered.forEach((b) => {
       const item = document.createElement('div');
       item.className = 'popover-book-option';
+      if (state.selectedBook && state.selectedBook.id === b.id) {
+        item.classList.add('selected');
+      }
       item.innerHTML = `
         <div class="popover-book-title">${escapeHtml(b.title)}</div>
-        <div class="popover-book-meta">by ${escapeHtml(b.author)} &bull; ${b.chunks_count || 0} chunks</div>
+        <div class="popover-book-meta">by ${escapeHtml(b.author || 'Unknown')} &bull; ${b.chunks_count || 0} passages</div>
       `;
       item.addEventListener('click', () => {
         attachBook(b);
@@ -272,12 +297,24 @@ document.addEventListener('DOMContentLoaded', () => {
     } else {
       bookPopover.classList.add('open');
       window.SFX?.playBlip(620, 0.03);
+      if (popoverBookSearch) {
+        popoverBookSearch.value = '';
+        renderPopoverBooks('');
+        setTimeout(() => popoverBookSearch.focus(), 50);
+      }
     }
   }
 
   function closePopover() {
     bookPopover.classList.remove('open');
+    if (popoverBookSearch) {
+      popoverBookSearch.value = '';
+    }
   }
+
+  popoverBookSearch?.addEventListener('input', (e) => {
+    renderPopoverBooks(e.target.value);
+  });
 
   btnBookPlus?.addEventListener('click', (e) => {
     e.stopPropagation();
@@ -293,7 +330,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  // 7. Chat Sessions & History Management
+  // 7. Chat Sessions & History Management (with Chat Deletion)
   function createNewChat() {
     window.SFX?.playBlip(900, 0.04);
     const newSession = {
@@ -308,6 +345,25 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   btnNewChat?.addEventListener('click', createNewChat);
+
+  function deleteSession(sessionId) {
+    window.SFX?.playBlip(350, 0.05);
+    const idx = state.sessions.findIndex(s => s.id === sessionId);
+    if (idx === -1) return;
+
+    const wasActive = state.activeSessionId === sessionId;
+    state.sessions.splice(idx, 1);
+    saveSessions();
+
+    if (state.sessions.length === 0) {
+      createNewChat();
+    } else if (wasActive) {
+      const nextSession = state.sessions[idx] || state.sessions[idx - 1] || state.sessions[0];
+      switchSession(nextSession.id);
+    } else {
+      renderSessionList();
+    }
+  }
 
   function switchSession(sessionId) {
     state.activeSessionId = sessionId;
@@ -328,7 +384,29 @@ document.addEventListener('DOMContentLoaded', () => {
     state.sessions.forEach((s) => {
       const item = document.createElement('div');
       item.className = `history-item ${state.activeSessionId === s.id ? 'active' : ''}`;
-      item.textContent = s.title || 'Untitled';
+
+      const titleSpan = document.createElement('span');
+      titleSpan.className = 'history-item-title';
+      titleSpan.textContent = s.title || 'Untitled';
+
+      const delBtn = document.createElement('button');
+      delBtn.className = 'btn-delete-session';
+      delBtn.title = 'Delete conversation';
+      delBtn.setAttribute('aria-label', 'Delete conversation');
+      delBtn.innerHTML = `
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="3 6 5 6 21 6"></polyline>
+          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+        </svg>
+      `;
+      delBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        deleteSession(s.id);
+      });
+
+      item.appendChild(titleSpan);
+      item.appendChild(delBtn);
+
       item.addEventListener('click', () => {
         window.SFX?.playBlip(550, 0.03);
         switchSession(s.id);
@@ -440,11 +518,23 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     try {
+      // Gather previous conversation context (up to last 10 turns, excluding current prompt)
+      const pastMessages = session.messages.slice(0, -1);
+      const history = pastMessages.slice(-10).map(m => {
+        let content = m.content || '';
+        content = content.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+        return {
+          role: m.role === 'ai' ? 'assistant' : m.role,
+          content: content
+        };
+      }).filter(m => m.content && (m.role === 'user' || m.role === 'assistant'));
+
       const payload = {
         book_id: state.selectedBook ? state.selectedBook.id : null,
         query: userMessageText,
         image: image || null,
-        mode: 'ask'
+        mode: 'ask',
+        history: history
       };
 
       const res = await fetch('/api.php?action=query', {
