@@ -20,11 +20,20 @@ class Config {
     }
 
     public static function get($key, $default = null) {
-        if (isset(self::$env[$key])) {
+        if (isset(self::$env[$key]) && self::$env[$key] !== '') {
             return self::$env[$key];
         }
         $envVal = getenv($key);
-        return ($envVal !== false) ? $envVal : $default;
+        if ($envVal !== false && $envVal !== '') {
+            return $envVal;
+        }
+        if (isset($_ENV[$key]) && $_ENV[$key] !== '') {
+            return $_ENV[$key];
+        }
+        if (isset($_SERVER[$key]) && $_SERVER[$key] !== '') {
+            return $_SERVER[$key];
+        }
+        return $default;
     }
 }
 

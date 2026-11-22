@@ -2,6 +2,8 @@ package ai.verbose;
 
 import android.annotation.SuppressLint;
 import android.app.Activity;
+import android.content.Intent;
+import android.net.Uri;
 import android.os.Bundle;
 import android.view.View;
 import android.view.WindowManager;
@@ -49,6 +51,12 @@ public class MainActivity extends Activity {
         settings.setUseWideViewPort(true);
         settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
 
+        // Normalize User Agent to allow Google OAuth login in-app
+        String ua = settings.getUserAgentString();
+        if (ua != null && ua.contains("; wv")) {
+            settings.setUserAgentString(ua.replace("; wv", ""));
+        }
+
         CookieManager.getInstance().setAcceptCookie(true);
         CookieManager.getInstance().setAcceptThirdPartyCookies(webView, true);
 
@@ -57,11 +65,21 @@ public class MainActivity extends Activity {
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
                 String url = request.getUrl().toString();
-                // Keep all verboseai.vercel.app URLs in-app
-                if (url.startsWith("https://verboseai.vercel.app")) {
+                // Allow in-app domain and Google OAuth authorization flow inside WebView
+                if (url.startsWith("https://verboseai.vercel.app") ||
+                    url.startsWith("https://accounts.google.com") ||
+                    url.startsWith("https://oauth2.googleapis.com") ||
+                    url.startsWith("https://ssl.gstatic.com") ||
+                    url.startsWith("https://apis.google.com") ||
+                    url.startsWith("http://127.0.0.1:8080") ||
+                    url.startsWith("http://localhost:8080")) {
                     return false;
                 }
-                // Open external URLs in system browser
+                // Open external links in device browser
+                try {
+                    Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
+                    startActivity(intent);
+                } catch (Exception ignored) {}
                 return true;
             }
         });
