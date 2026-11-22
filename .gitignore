@@ -3,3 +3,4 @@ vendor/
 thinking-orbs-src/
 *.log
 build-output/
+data/
