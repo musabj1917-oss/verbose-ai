@@ -31,17 +31,23 @@ class Database {
             $dsn = "pgsql:host={$host};port={$port};dbname={$dbname};sslmode=require";
         }
 
-        try {
-            self::$pdo = new PDO($dsn, $user, $pass, [
-                PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-                PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-                PDO::ATTR_TIMEOUT => 5
-            ]);
-            self::$pdo->exec("CREATE EXTENSION IF NOT EXISTS vector;");
-            return self::$pdo;
-        } catch (Exception $e) {
-            error_log("Database connection error: " . $e->getMessage());
-            return null;
+        for ($attempt = 1; $attempt <= 3; $attempt++) {
+            try {
+                self::$pdo = new PDO($dsn, $user, $pass, [
+                    PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+                    PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+                    PDO::ATTR_TIMEOUT => 20
+                ]);
+                self::$pdo->exec("CREATE EXTENSION IF NOT EXISTS vector;");
+                return self::$pdo;
+            } catch (Exception $e) {
+                if ($attempt === 3) {
+                    error_log("Database connection error: " . $e->getMessage());
+                    return null;
+                }
+                sleep(2);
+            }
         }
+        return null;
     }
 }
