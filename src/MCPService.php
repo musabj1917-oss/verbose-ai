@@ -590,7 +590,7 @@ class MCPService {
         $texts = array_column($rows, 'chunk_text');
         $vecs = Embedder::embedBatch($texts);
         if (!$vecs) {
-            throw new Exception("Gemini embedding batch failed. Verify GEMINI_API_KEY.");
+            throw new Exception("Embedding batch failed. Verify OPENROUTER_API_KEY or GEMINI_API_KEY.");
         }
 
         $update = $pdo->prepare("UPDATE book_chunks SET embedding = CAST(? AS vector) WHERE id = ?");

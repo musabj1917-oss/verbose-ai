@@ -275,7 +275,7 @@ if ($action === 'backfill_embeddings') {
         exit;
     }
     try {
-        $rows = $pdo->query("SELECT id, chunk_text FROM book_chunks WHERE embedding IS NULL ORDER BY id ASC LIMIT 16")->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        $rows = $pdo->query("SELECT id, chunk_text FROM book_chunks WHERE embedding IS NULL ORDER BY id ASC LIMIT 32")->fetchAll(PDO::FETCH_ASSOC) ?: [];
         if (empty($rows)) {
             $totalChunks = intval($pdo->query("SELECT COUNT(*) FROM book_chunks")->fetchColumn() ?: 0);
             echo json_encode([
@@ -295,7 +295,7 @@ if ($action === 'backfill_embeddings') {
 
         $vecs = Embedder::embedBatch($texts);
         if (!$vecs) {
-            echo json_encode(['success' => false, 'error' => 'Gemini embedding API call failed. Verify GEMINI_API_KEY.']);
+            echo json_encode(['success' => false, 'error' => 'Embedding API call failed. Verify OPENROUTER_API_KEY or GEMINI_API_KEY.']);
             exit;
         }
 
