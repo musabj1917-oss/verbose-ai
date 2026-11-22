@@ -47,13 +47,24 @@ document.addEventListener('DOMContentLoaded', () => {
   const btnTestSound = document.getElementById('btn-test-sound');
 
   // State
+  const isUnlimitedBody = document.body.dataset.isUnlimited === '1';
+  const selectedTierBody = document.body.dataset.selectedTier || 'medium';
+
   const state = {
     books: [],
     selectedBook: null,
     sessions: JSON.parse(localStorage.getItem('verbose_sessions') || '[]'),
     activeSessionId: null,
     isGenerating: false,
-    scannedImage: null
+    scannedImage: null,
+    selectedTier: selectedTierBody,
+    isUnlimited: isUnlimitedBody,
+    quota: {
+      is_unlimited: isUnlimitedBody,
+      credits_total: isUnlimitedBody ? 999999 : 1000,
+      credits_used: 0,
+      credits_remaining: isUnlimitedBody ? 999999 : 1000
+    }
   };
 
   // 1. Dynamic Greeting
@@ -114,6 +125,65 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   initSettings();
 
+  // 2b. Three-Tier Cluster Selector & Quota Sync
+  function initClusters() {
+    const clusterButtons = document.querySelectorAll('.cluster-btn');
+    clusterButtons.forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.preventDefault();
+        const tier = btn.dataset.tier;
+        if (!tier || tier === state.selectedTier) return;
+        state.selectedTier = tier;
+        clusterButtons.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+
+        if (tier === 'pro') window.SFX?.playBlip(880, 0.05);
+        else if (tier === 'medium') window.SFX?.playBlip(660, 0.04);
+        else window.SFX?.playBlip(520, 0.03);
+
+        try {
+          await fetch('/api.php?action=set_tier', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ tier: tier })
+          });
+        } catch (err) {}
+      });
+    });
+  }
+  initClusters();
+
+  async function updateQuotaDisplay() {
+    try {
+      const res = await fetch('/api.php?action=get_quota');
+      const data = await res.json();
+      if (data.success) {
+        state.isUnlimited = !!data.is_unlimited;
+        state.quota = data;
+        const badge = document.getElementById('user-quota-badge');
+        if (badge) {
+          if (data.is_unlimited) {
+            badge.className = 'badge-unlimited';
+            badge.title = 'Developer Unlimited Account (Zero Usage Depletion)';
+            badge.innerHTML = '<span class="pulse-dot"></span><span>&infin; Unlimited</span>';
+          } else {
+            badge.className = 'quota-pill';
+            badge.title = 'Remaining AI Turn Credits';
+            const total = data.credits_total || 1000;
+            const remaining = data.credits_remaining !== undefined ? data.credits_remaining : (total - (data.credits_used || 0));
+            const pct = Math.round((remaining / Math.max(1, total)) * 100);
+            badge.innerHTML = `
+              <div class="quota-bar-fill">
+                <div id="quota-bar-inner" class="quota-bar-inner" style="width: ${pct}%;"></div>
+              </div>
+              <span id="quota-credits-text">${remaining} / ${total}</span>
+            `;
+          }
+        }
+      }
+    } catch (e) {}
+  }
+
   // 3. Mechanical Key-tick SFX on typing & Send Button State
   function updateSendButtonState() {
     if (!promptInput || !btnSend) return;
@@ -122,7 +192,7 @@ document.addEventListener('DOMContentLoaded', () => {
     btnSend.disabled = (!hasText && !hasImage) || state.isGenerating;
   }
 
-  // Image Scanning Listener & OCR Image Resizing
+  // Image Scanning Listener & OCR Image Resizing (Strictly photo only, 720p cap for standard users)
   btnScanImage?.addEventListener('click', (e) => {
     e.stopPropagation();
     imageScanInput?.click();
@@ -132,11 +202,19 @@ document.addEventListener('DOMContentLoaded', () => {
     const file = e.target.files && e.target.files[0];
     if (!file) return;
 
+    // Strict photo check: reject video
+    if (file.type && !file.type.startsWith('image/')) {
+      alert('Only photo files (JPG, PNG, WEBP) are supported. Video upload is not supported.');
+      imageScanInput.value = '';
+      return;
+    }
+
     const reader = new FileReader();
     reader.onload = function(evt) {
       const img = new Image();
       img.onload = function() {
-        const maxDim = 1280;
+        // Enforce 720p maximum dimension for standard users; full resolution (up to 2048) for unlimited users
+        const maxDim = state.isUnlimited ? 2048 : 720;
         let width = img.width;
         let height = img.height;
         if (width > maxDim || height > maxDim) {
@@ -159,6 +237,10 @@ document.addEventListener('DOMContentLoaded', () => {
         if (attachedImageThumb) attachedImageThumb.src = resizedDataUrl;
         if (attachedImageLabel) {
           attachedImageLabel.textContent = file.name.length > 18 ? file.name.slice(0, 15) + '...' : file.name;
+        }
+        const resBadge = document.getElementById('attached-image-res-badge');
+        if (resBadge) {
+          resBadge.textContent = state.isUnlimited ? 'Full-Res' : '720p Max';
         }
         if (attachedImagePill) attachedImagePill.style.display = 'inline-flex';
         window.SFX?.playBlip(880, 0.05);
@@ -517,6 +599,8 @@ document.addEventListener('DOMContentLoaded', () => {
       });
     }
 
+    window.app3DBackground?.setState('searching');
+
     try {
       // Gather previous conversation context (up to last 10 turns, excluding current prompt)
       const pastMessages = session.messages.slice(0, -1);
@@ -534,7 +618,8 @@ document.addEventListener('DOMContentLoaded', () => {
         query: userMessageText,
         image: image || null,
         mode: 'ask',
-        history: history
+        history: history,
+        tier: state.selectedTier || 'medium'
       };
 
       const res = await fetch('/api.php?action=query', {
@@ -544,15 +629,46 @@ document.addEventListener('DOMContentLoaded', () => {
       });
 
       const data = await res.json();
+
+      if (data.quota_exceeded) {
+        inlineOrb?.destroy();
+        contemplationBadge.style.display = 'none';
+        aiBubble.innerHTML = `
+          <div style="padding: 14px 16px; border: 1px solid rgba(255, 120, 120, 0.35); border-radius: 10px; background: rgba(255, 60, 60, 0.08); color: #ff9b9b; font-size: 0.82rem; line-height: 1.6;">
+            <div style="font-weight: 600; margin-bottom: 4px; display: flex; align-items: center; gap: 6px;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+              <span>Cluster Usage Limit Reached</span>
+            </div>
+            <div>${escapeHtml(data.error || 'Your usage limit for this model cluster has been depleted.')}</div>
+            <div style="margin-top: 8px; font-size: 0.74rem; color: #ccc;">
+              Tip: Switch to <strong>Verbose Light</strong> (1 pt) in the top bar to continue reading with minimal credit consumption.
+            </div>
+          </div>
+        `;
+        window.SFX?.playBlip(320, 0.08);
+        updateQuotaDisplay();
+        return;
+      }
+
       const fullAnswer = data.answer || 'No answer generated.';
       const finalProvider = data.provider || 'Verbose AI';
       const finalCitations = data.citations || [];
+
+      // Update quota status in UI if returned
+      if (data.quota) {
+        state.quota = data.quota;
+        updateQuotaDisplay();
+      }
+
+      // Update 3D background to grounding state if citations exist, then weaving
+      window.app3DBackground?.setState(finalCitations.length > 0 ? 'grounding' : 'weaving');
 
       // Transition thinking orb to breathing & hide contemplation badge
       inlineOrb?.setState('breathing');
       contemplationBadge.style.display = 'none';
 
       // Write out the complete response line-by-line like ChatGPT and Claude
+      window.app3DBackground?.setState('weaving');
       await streamLineByLine(aiBubble, fullAnswer);
 
       // Finalize message display without cursor
@@ -584,6 +700,7 @@ document.addEventListener('DOMContentLoaded', () => {
       contemplationBadge.style.display = 'none';
       aiBubble.textContent = 'Error contacting Verbose AI server. Please verify your connection.';
     } finally {
+      window.app3DBackground?.setState('idle');
       state.isGenerating = false;
       updateSendButtonState();
       scrollCanvasToBottom();

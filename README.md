@@ -9,6 +9,7 @@ Verbose AI is a full-stack reading and comprehension platform powered by **PHP 8
 ### Key Highlights
 
 - **Antigravity Spatial Design:** Glassmorphic, weightless interface with CSS 3D perspective (`1200px`) and live citation inspector.
+- **Vercel Labs vgpu WebGPU Engine:** Hardware-accelerated WebGPU shader visualizer (`vgpu.sh`) with typed WGSL fragment shaders and live particle resonance on the AI model landing page (`/landing`).
 - **Thinking Orbs Canvas Integration:** Real-time dotted 3D loading indicator ported from `Jakubantalik/thinking-orbs` with 9 agent states:
   - `breathing`: Ambient idle ring.
   - `searching`: Sweeping globe meridian while querying Neon Postgres.
@@ -40,3 +41,18 @@ Admins can curate and ingest books via the CLI:
 ```bash
 php bin/ingest.php --title "Meditations" --author "Marcus Aurelius" --file ./path/to/book.txt
 ```
+
+### Google OAuth 2.0 Setup
+
+Verbose AI supports seamless **Sign in with Google** via Google OAuth 2.0 and Google Identity Services:
+
+1. Create OAuth credentials in [Google Cloud Console](https://console.cloud.google.com/apis/credentials).
+2. Set application type to **Web application**.
+3. Add Authorized Redirect URI: `http://localhost:8080/auth/google/callback` (or your production URL).
+4. Add to `.env`:
+   ```bash
+   GOOGLE_CLIENT_ID=your_client_id.apps.googleusercontent.com
+   GOOGLE_CLIENT_SECRET=your_client_secret
+   GOOGLE_REDIRECT_URI=http://localhost:8080/auth/google/callback
+   ```
+5. Users can now sign in using the "Continue with Google" button or email/password.

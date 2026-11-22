@@ -45,6 +45,47 @@ if ($uri === '/mcp' || $uri === '/mcp.php' || $uri === '/api/mcp') {
     exit;
 }
 
+// Google OAuth initiate
+if ($uri === '/auth/google' || $uri === '/login/google') {
+    if (AuthService::getCurrentUser()) {
+        header('Location: /');
+        exit;
+    }
+    if (!AuthService::isGoogleConfigured()) {
+        header('Location: /login?google_unconfigured=1');
+        exit;
+    }
+    $authUrl = AuthService::getGoogleAuthUrl();
+    if (!empty($authUrl)) {
+        header('Location: ' . $authUrl);
+        exit;
+    }
+    header('Location: /login?error=' . urlencode('Could not initialize Google OAuth session.'));
+    exit;
+}
+
+// Google OAuth callback
+if ($uri === '/auth/google/callback') {
+    if (isset($_GET['error'])) {
+        header('Location: /login?error=' . urlencode('Google Sign-In canceled or access denied: ' . $_GET['error']));
+        exit;
+    }
+    $code = $_GET['code'] ?? '';
+    $state = $_GET['state'] ?? '';
+    if (empty($code) || empty($state)) {
+        header('Location: /login?error=' . urlencode('Missing Google OAuth code or state parameter.'));
+        exit;
+    }
+    $res = AuthService::handleGoogleCallback($code, $state);
+    if ($res['success']) {
+        header('Location: /app');
+        exit;
+    } else {
+        header('Location: /login?error=' . urlencode($res['error'] ?? 'Google authentication failed.'));
+        exit;
+    }
+}
+
 // Logout endpoint
 if ($uri === '/logout') {
     AuthService::clearSession();
@@ -52,10 +93,16 @@ if ($uri === '/logout') {
     exit;
 }
 
+// Landing page for AI Model & VGPU Showcase
+if ($uri === '/landing' || $uri === '/model' || $uri === '/showcase' || $uri === '/vgpu') {
+    require __DIR__ . '/../templates/landing.php';
+    exit;
+}
+
 // Dedicated Auth pages
 if ($uri === '/login' || $uri === '/signup' || $uri === '/auth') {
     if (AuthService::getCurrentUser()) {
-        header('Location: /');
+        header('Location: /app');
         exit;
     }
     require __DIR__ . '/../templates/auth.php';
@@ -84,9 +131,9 @@ if ($uri === '/app' || $uri === '/reader') {
     exit;
 }
 
-// Root entrypoint: FIRST page MUST be login if not authenticated
+// Root entrypoint: showcase landing page if unauthenticated, reader if authenticated
 if (!$currentUser) {
-    require __DIR__ . '/../templates/auth.php';
+    require __DIR__ . '/../templates/landing.php';
     exit;
 }
 

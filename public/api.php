@@ -173,6 +173,107 @@ if ($action === 'ingest_book') {
 }
 
 if ($action === 'get_books') { echo json_encode(['success' => true, 'books' => $bookService->getBooks()]); exit; }
+if ($action === 'google_config') {
+    echo json_encode([
+        'success' => true,
+        'configured' => AuthService::isGoogleConfigured(),
+        'client_id' => AuthService::getGoogleClientId(),
+        'redirect_uri' => AuthService::getGoogleRedirectUri()
+    ]);
+    exit;
+}
+if ($action === 'google_auth_url') {
+    if (!AuthService::isGoogleConfigured()) {
+        echo json_encode(['success' => false, 'error' => 'Google OAuth is not configured in .env']);
+        exit;
+    }
+    echo json_encode(['success' => true, 'url' => AuthService::getGoogleAuthUrl()]);
+    exit;
+}
+if ($action === 'google_verify_token') {
+    $rawInput = file_get_contents('php://input');
+    $input = json_decode($rawInput, true) ?: [];
+    $credential = $input['credential'] ?? '';
+    if (empty($credential)) {
+        echo json_encode(['success' => false, 'error' => 'Missing Google credential token.']);
+        exit;
+    }
+    $result = AuthService::verifyAndLoginGoogleIdToken($credential);
+    echo json_encode($result);
+    exit;
+}
+if ($action === 'user_profile') {
+    $profile = AuthService::getCurrentUserProfile();
+    if (!$profile) {
+        echo json_encode(['success' => false, 'error' => 'Not authenticated']);
+        exit;
+    }
+    echo json_encode(['success' => true, 'user' => $profile]);
+    exit;
+}
+if ($action === 'get_quota') {
+    $email = AuthService::getCurrentUser();
+    $quota = AuthService::getQuotaStatus($email);
+    echo json_encode(array_merge(['success' => true], $quota));
+    exit;
+}
+if ($action === 'set_tier') {
+    $rawInput = file_get_contents('php://input');
+    $input = json_decode($rawInput, true) ?: [];
+    $tier = AIService::normalizeTier($input['tier'] ?? 'medium');
+    $email = AuthService::getCurrentUser();
+    $saved = AuthService::setUserTier($email, $tier);
+    echo json_encode(['success' => $saved, 'tier' => $tier]);
+    exit;
+}
+if ($action === 'analyze_photo') {
+    $rawInput = file_get_contents('php://input');
+    $input = json_decode($rawInput, true) ?: [];
+    $image = $input['image'] ?? null;
+    $query = trim($input['query'] ?? $input['prompt'] ?? '');
+    $tier = AIService::normalizeTier($input['tier'] ?? 'medium');
+    $bookId = $input['book_id'] ?? null;
+
+    $currentUser = AuthService::getCurrentUserProfile();
+    $userEmail = $currentUser['email'] ?? AuthService::getCurrentUser();
+    $isUnlimited = !empty($currentUser['is_unlimited']);
+
+    $activeBook = null;
+    if (!empty($bookId)) {
+        $books = $bookService->getBooks();
+        foreach ($books as $b) {
+            if ($b['id'] == $bookId) {
+                $activeBook = $b;
+                break;
+            }
+        }
+    }
+    $bookTitle = $activeBook ? $activeBook['title'] : null;
+    $citations = $activeBook ? $bookService->getGroundedChunks($bookId, $query) : [];
+
+    // Deduct tier usage credits
+    $quotaDeduction = AuthService::deductCredits($userEmail, $tier);
+    if (!$quotaDeduction['allowed']) {
+        echo json_encode([
+            'success' => false,
+            'quota_exceeded' => true,
+            'error' => $quotaDeduction['error'],
+            'credits_remaining' => $quotaDeduction['credits_remaining'] ?? 0,
+            'tier' => $tier
+        ]);
+        exit;
+    }
+
+    $result = $aiService->analyzePhoto($image, $query, $tier, $isUnlimited, $bookTitle, $citations);
+    $result['quota'] = [
+        'is_unlimited' => $quotaDeduction['is_unlimited'] ?? false,
+        'cost' => $quotaDeduction['cost'] ?? 0,
+        'credits_remaining' => $quotaDeduction['credits_remaining'] ?? 0,
+        'tier' => $tier
+    ];
+    echo json_encode($result);
+    exit;
+}
 if ($action === 'auth') {
     $rawInput = file_get_contents('php://input');
     $input = json_decode($rawInput, true) ?: [];
@@ -337,6 +438,24 @@ if ($action === 'query' || $action === 'scan_image') {
     $mode = $input['mode'] ?? 'ask';
     $stream = !empty($input['stream']) || isset($_GET['stream']);
     $history = is_array($input['history'] ?? null) ? $input['history'] : [];
+    $tier = AIService::normalizeTier($input['tier'] ?? 'medium');
+
+    $currentUser = AuthService::getCurrentUserProfile();
+    $userEmail = $currentUser['email'] ?? AuthService::getCurrentUser();
+    $isUnlimited = !empty($currentUser['is_unlimited']);
+
+    // Deduct cluster turn usage limits
+    $quotaDeduction = AuthService::deductCredits($userEmail, $tier);
+    if (!$quotaDeduction['allowed']) {
+        echo json_encode([
+            'success' => false,
+            'quota_exceeded' => true,
+            'error' => $quotaDeduction['error'],
+            'credits_remaining' => $quotaDeduction['credits_remaining'] ?? 0,
+            'tier' => $tier
+        ]);
+        exit;
+    }
 
     $activeBook = null;
     if (!empty($bookId)) {
@@ -352,29 +471,31 @@ if ($action === 'query' || $action === 'scan_image') {
     $bookTitle = $activeBook ? $activeBook['title'] : null;
     $citations = $activeBook ? $bookService->getGroundedChunks($bookId, $query) : [];
 
-    // Vision Model for Image Scanning & OCR Transcription
+    // Role 1: Photo Analyzer (strictly photo only, 720p cap for standard accounts)
     $scannedTranscription = null;
     $visionProvider = null;
     if (!empty($image)) {
-        $visionResult = $aiService->scanImage($image, $query, $bookTitle, $citations);
+        $visionResult = $aiService->analyzePhoto($image, $query, $tier, $isUnlimited, $bookTitle, $citations);
         $scannedTranscription = trim($visionResult['transcription'] ?? $visionResult['answer'] ?? '');
-        $visionProvider = $visionResult['provider'] ?? 'Vision Engine';
+        $visionProvider = $visionResult['provider'] ?? AIService::getCustomModelName('', $tier, 'vision');
 
         // Prepend optical transcription to citations tray for UI inspection
         if (!empty($scannedTranscription)) {
             $cleanTranscription = trim(preg_replace('/<think>.*?<\/think>\s*/s', '', $scannedTranscription));
             $visionCitation = [
                 'id' => 'vision',
-                'chapter' => 'Optical Transcription (' . $visionProvider . ')',
+                'chapter' => 'Photo Inspection (' . $visionProvider . ')',
                 'section' => 0,
                 'text' => $cleanTranscription,
-                'similarity' => 1.0
+                'similarity' => 1.0,
+                'tier' => $tier,
+                'resolution' => $visionResult['resolution'] ?? ($isUnlimited ? 'Full Fidelity (Unlimited)' : '720p Standard Resolution')
             ];
             array_unshift($citations, $visionCitation);
         }
     }
 
-    // Real-Time Token Streaming Grounded Response
+    // Role 2: Thinker - Real-Time Token Streaming Grounded Response
     if ($stream) {
         header('Content-Type: text/event-stream; charset=utf-8');
         header('Cache-Control: no-cache, no-transform');
@@ -389,9 +510,9 @@ if ($action === 'query' || $action === 'scan_image') {
             echo "data: " . json_encode(['token' => $token]) . "\n\n";
             @ob_flush();
             flush();
-        }, $scannedTranscription, $history);
+        }, $scannedTranscription, $history, $tier);
 
-        $finalProvider = $result['provider'] ?? 'Verbose AI';
+        $finalProvider = $result['provider'] ?? AIService::getCustomModelName('', $tier, 'thinker');
         if (!empty($visionProvider)) {
             $finalProvider .= ' • ' . $visionProvider;
         }
@@ -402,17 +523,24 @@ if ($action === 'query' || $action === 'scan_image') {
             'provider' => $finalProvider,
             'vision_provider' => $visionProvider,
             'citations' => $citations,
-            'has_image' => !empty($image)
+            'has_image' => !empty($image),
+            'tier' => $tier,
+            'quota' => [
+                'is_unlimited' => $quotaDeduction['is_unlimited'] ?? false,
+                'cost' => $quotaDeduction['cost'] ?? 0,
+                'credits_remaining' => $quotaDeduction['credits_remaining'] ?? 0,
+                'tier' => $tier
+            ]
         ]) . "\n\n";
         @ob_flush();
         flush();
         exit;
     }
 
-    // Standard Non-Streamed Grounded Discourse
-    $result = $aiService->generateGroundedAnswer($query, $bookTitle, $citations, $mode, $scannedTranscription, $history);
+    // Role 2: Thinker - Standard Non-Streamed Grounded Discourse
+    $result = $aiService->generateGroundedAnswer($query, $bookTitle, $citations, $mode, $scannedTranscription, $history, $tier);
 
-    $finalProvider = $result['provider'] ?? 'Verbose AI';
+    $finalProvider = $result['provider'] ?? AIService::getCustomModelName('', $tier, 'thinker');
     if (!empty($visionProvider)) {
         $finalProvider .= ' • ' . $visionProvider;
     }
@@ -423,7 +551,14 @@ if ($action === 'query' || $action === 'scan_image') {
         'provider' => $finalProvider,
         'vision_provider' => $visionProvider,
         'citations' => $citations,
-        'has_image' => !empty($image)
+        'has_image' => !empty($image),
+        'tier' => $tier,
+        'quota' => [
+            'is_unlimited' => $quotaDeduction['is_unlimited'] ?? false,
+            'cost' => $quotaDeduction['cost'] ?? 0,
+            'credits_remaining' => $quotaDeduction['credits_remaining'] ?? 0,
+            'tier' => $tier
+        ]
     ]);
     exit;
 }

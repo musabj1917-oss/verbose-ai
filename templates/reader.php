@@ -5,9 +5,17 @@ if (!$auth) {
     header('Location: /login');
     exit;
 }
-$userEmail = is_array($auth) ? ($auth['email'] ?? '') : (string)$auth;
+$userProfile = AuthService::getCurrentUserProfile() ?: [];
+$userEmail = $userProfile['email'] ?? (is_array($auth) ? ($auth['email'] ?? '') : (string)$auth);
+$userName = !empty($userProfile['name']) ? $userProfile['name'] : explode('@', $userEmail)[0];
+$avatarUrl = $userProfile['avatar_url'] ?? null;
+$isUnlimited = !empty($userProfile['is_unlimited']);
+$selectedTier = $userProfile['selected_tier'] ?? 'medium';
+$creditsTotal = intval($userProfile['quota_credits_total'] ?? 1000);
+$creditsUsed = intval($userProfile['quota_credits_used'] ?? 0);
+$creditsRemaining = $isUnlimited ? 999999 : max(0, $creditsTotal - $creditsUsed);
 $currentUser = htmlspecialchars($userEmail ?: 'Reader');
-$displayName = explode('@', $currentUser)[0];
+$displayName = htmlspecialchars($userName ?: 'Reader');
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -22,7 +30,7 @@ $displayName = explode('@', $currentUser)[0];
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/css/style.css">
 </head>
-<body>
+<body data-is-unlimited="<?= $isUnlimited ? '1' : '0' ?>" data-selected-tier="<?= htmlspecialchars($selectedTier) ?>">
 
   <!-- Collapsible Sidebar -->
   <aside id="app-sidebar" class="sidebar">
@@ -46,8 +54,17 @@ $displayName = explode('@', $currentUser)[0];
     <div class="sidebar-bottom">
       <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
         <div style="display: flex; align-items: center; gap: 8px; overflow: hidden;">
-          <div class="user-avatar"><?= strtoupper(substr($displayName, 0, 1)) ?></div>
-          <span style="font-family: var(--font-mono); font-size: 0.72rem; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"><?= $displayName ?></span>
+          <?php if (!empty($avatarUrl)): ?>
+            <img src="<?= htmlspecialchars($avatarUrl) ?>" alt="Avatar" class="user-avatar" style="object-fit: cover; border-radius: 50%; width: 24px; height: 24px; border: 1px solid var(--border-medium); flex-shrink: 0;">
+          <?php else: ?>
+            <div class="user-avatar"><?= strtoupper(substr($displayName, 0, 1)) ?></div>
+          <?php endif; ?>
+          <div style="display: flex; flex-direction: column; overflow: hidden;">
+            <span style="font-family: var(--font-mono); font-size: 0.72rem; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"><?= $displayName ?></span>
+            <?php if ($isUnlimited): ?>
+              <span style="font-family: var(--font-mono); font-size: 0.6rem; color: #ffd166; font-weight: 600;">&infin; Unlimited Plan</span>
+            <?php endif; ?>
+          </div>
         </div>
         <a href="/logout" style="color: var(--text-dim); font-size: 0.72rem; text-decoration: none; transition: color 0.15s ease; flex-shrink: 0;" onmouseover="this.style.color='#fff'" onmouseout="this.style.color='var(--text-dim)'">Sign Out</a>
       </div>
@@ -72,6 +89,37 @@ $displayName = explode('@', $currentUser)[0];
       </div>
 
       <div class="top-bar-right">
+        <!-- 3-Tier AI Cluster Switcher -->
+        <div class="cluster-selector" id="cluster-selector" title="Select AI Model Cluster">
+          <button type="button" class="cluster-btn light <?= $selectedTier === 'light' ? 'active' : '' ?>" data-tier="light" title="Verbose Light: Rapid high-volume inference (1 credit)">
+            <span>Light</span>
+            <span class="cluster-cost-tag">1 pt</span>
+          </button>
+          <button type="button" class="cluster-btn medium <?= $selectedTier === 'medium' ? 'active' : '' ?>" data-tier="medium" title="Verbose Medium: Smart cost-efficient Gemini 3.8 Flash (5 credits)">
+            <span>Medium</span>
+            <span class="cluster-cost-tag">5 pt</span>
+          </button>
+          <button type="button" class="cluster-btn pro <?= $selectedTier === 'pro' ? 'active' : '' ?>" data-tier="pro" title="Verbose Pro: Deep contemplation frontier models (25 credits)">
+            <span>Pro</span>
+            <span class="cluster-cost-tag">25 pt</span>
+          </button>
+        </div>
+
+        <!-- Account Quota / Unlimited Badge (Strictly NO refill button) -->
+        <?php if ($isUnlimited): ?>
+          <div class="badge-unlimited" id="user-quota-badge" title="Developer Unlimited Account (Zero Usage Depletion)">
+            <span class="pulse-dot"></span>
+            <span>&infin; Unlimited</span>
+          </div>
+        <?php else: ?>
+          <div class="quota-pill" id="user-quota-badge" title="Remaining AI Turn Credits">
+            <div class="quota-bar-fill">
+              <div id="quota-bar-inner" class="quota-bar-inner" style="width: <?= round(($creditsRemaining / max(1, $creditsTotal)) * 100) ?>%;"></div>
+            </div>
+            <span id="quota-credits-text"><?= $creditsRemaining ?> / <?= $creditsTotal ?></span>
+          </div>
+        <?php endif; ?>
+
         <button id="btn-open-settings" class="btn-settings-nav" title="Settings">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <circle cx="12" cy="12" r="3"></circle>
@@ -90,13 +138,13 @@ $displayName = explode('@', $currentUser)[0];
             <img src="/img/logo.svg" class="greeting-logo" alt="Verbose AI">
           </div>
           <h1 id="greeting-heading" class="greeting-time-title">Good morning</h1>
-          <p class="greeting-subtitle">Zero-hallucination literary intelligence.<br>Every answer grounded in verified book text.</p>
+          <p class="greeting-subtitle">Zero-hallucination literary intelligence across 3 AI clusters.<br>Every answer grounded in verified book text.</p>
           <div class="book-attach-hint">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
               <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
             </svg>
-            <span>Ask anything, attach a book for context, or scan an image page</span>
+            <span>Ask anything, attach a book for context, or scan a document photo</span>
           </div>
         </div>
         <div id="messages-container" style="display: flex; flex-direction: column; gap: 28px; width: 100%;"></div>
@@ -132,8 +180,9 @@ $displayName = explode('@', $currentUser)[0];
           </div>
           <div id="attached-image-pill" class="attached-image-pill" style="display: none;">
             <img id="attached-image-thumb" class="attached-image-thumb" src="" alt="Scan">
-            <span id="attached-image-label">Page Scanned</span>
-            <button id="btn-remove-image" class="attached-image-remove" title="Remove image">&times;</button>
+            <span id="attached-image-label">Photo</span>
+            <span id="attached-image-res-badge" class="photo-res-badge"><?= $isUnlimited ? 'Full-Res' : '720p Max' ?></span>
+            <button id="btn-remove-image" class="attached-image-remove" title="Remove photo">&times;</button>
           </div>
         </div>
 
@@ -144,14 +193,14 @@ $displayName = explode('@', $currentUser)[0];
               <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
             </svg>
           </button>
-          <input type="file" id="image-scan-input" accept="image/*" style="display: none;">
-          <button id="btn-scan-image" class="btn-scan-image" title="Scan or upload page image">
+          <input type="file" id="image-scan-input" accept="image/png,image/jpeg,image/webp,image/gif" style="display: none;">
+          <button id="btn-scan-image" class="btn-scan-image" title="Upload Photo (720p standard / Full-res unlimited)">
             <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
               <circle cx="12" cy="13" r="4"></circle>
             </svg>
           </button>
-          <textarea id="prompt-input" class="input-textarea" rows="1" placeholder="Ask a question or scan a page..."></textarea>
+          <textarea id="prompt-input" class="input-textarea" rows="1" placeholder="Ask a question or attach a photo..."></textarea>
           <button id="btn-send-prompt" class="btn-action-send" title="Send" disabled>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
               <line x1="12" y1="19" x2="12" y2="5"></line>
@@ -205,6 +254,7 @@ $displayName = explode('@', $currentUser)[0];
 
   <script src="/js/thinking-orbs.js"></script>
   <script src="/js/sfx.js"></script>
+  <script src="/js/vgpu-background.js"></script>
   <script src="/js/starfield.js"></script>
   <script src="/js/app.js"></script>
 </body>

@@ -301,7 +301,7 @@ class MCPService {
         ];
     }
 
-    private function callTool(string $toolName, array $args) {
+    public function callTool(string $toolName, array $args) {
         $pdo = Database::getConnection();
         if (!$pdo) {
             throw new Exception("Database connection failed. Verify DATABASE_URL.");
