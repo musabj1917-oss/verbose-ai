@@ -67,19 +67,31 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   };
 
-  // 1. Dynamic Greeting
-  function updateGreeting() {
-    if (!greetingHeading) return;
-    const hour = new Date().getHours();
-    let phrase = 'Good evening';
-    if (hour >= 5 && hour < 12) {
-      phrase = 'Good morning';
-    } else if (hour >= 12 && hour < 18) {
-      phrase = 'Good afternoon';
+  // 1. Studio Greeting & Starter Prompt Cards
+  function initStudioGreeting() {
+    // If running in native Android app, add class to body and enable native features
+    if (window.AndroidBridge && typeof window.AndroidBridge.isNativeApp === 'function' && window.AndroidBridge.isNativeApp()) {
+      document.body.classList.add('is-native-android');
     }
-    greetingHeading.textContent = phrase;
+
+    // Attach click listeners to starter prompt cards
+    document.querySelectorAll('.starter-prompt-card').forEach(card => {
+      card.addEventListener('click', () => {
+        const prompt = card.getAttribute('data-prompt');
+        if (prompt && promptInput) {
+          promptInput.value = prompt;
+          autoResizeTextarea();
+          updateSendButtonState();
+          promptInput.focus();
+          window.SFX?.playKeyboardTick();
+          if (window.AndroidBridge && window.AndroidBridge.vibrate) {
+            window.AndroidBridge.vibrate(15);
+          }
+        }
+      });
+    });
   }
-  updateGreeting();
+  initStudioGreeting();
 
   // 2. Dedicated Settings Management
   function initSettings() {
@@ -140,6 +152,10 @@ document.addEventListener('DOMContentLoaded', () => {
         if (tier === 'pro') window.SFX?.playBlip(880, 0.05);
         else if (tier === 'medium') window.SFX?.playBlip(660, 0.04);
         else window.SFX?.playBlip(520, 0.03);
+
+        if (window.AndroidBridge && window.AndroidBridge.vibrate) {
+          window.AndroidBridge.vibrate(18);
+        }
 
         try {
           await fetch('/api.php?action=set_tier', {
@@ -244,6 +260,9 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         if (attachedImagePill) attachedImagePill.style.display = 'inline-flex';
         window.SFX?.playBlip(880, 0.05);
+        if (window.AndroidBridge && window.AndroidBridge.showToast) {
+          window.AndroidBridge.showToast('Book photo attached for analysis');
+        }
         updateSendButtonState();
         promptInput?.focus();
       };
@@ -527,6 +546,9 @@ document.addEventListener('DOMContentLoaded', () => {
     if (attachedImageThumb) attachedImageThumb.src = '';
 
     window.SFX?.playSend();
+    if (window.AndroidBridge && window.AndroidBridge.vibrate) {
+      window.AndroidBridge.vibrate(25);
+    }
 
     const displayTitle = text || 'Scanned Document';
     let session = state.sessions.find(s => s.id === state.activeSessionId);

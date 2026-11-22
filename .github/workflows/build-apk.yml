@@ -47,13 +47,11 @@ jobs:
             echo "Copied debug APK"
           fi
 
-          # Sign release APK with auto-generated keystore so it installs immediately
+          # Copy release APK (already signed with repository keystore via Gradle)
           RELEASE_APK=$(find app/build/outputs/apk/release -name "*.apk" | head -n 1)
           if [ -n "$RELEASE_APK" ] && [ -f "$RELEASE_APK" ]; then
-            keytool -genkey -v -keystore release.keystore -alias verbose -keyalg RSA -keysize 2048 -validity 10000 -storepass verbosepass -keypass verbosepass -dname "CN=VerboseAI, OU=Mobile, O=Verbose, L=SanFrancisco, S=CA, C=US"
-            jarsigner -verbose -sigalg SHA256withRSA -digestalg SHA-256 -keystore release.keystore -storepass verbosepass -keypass verbosepass "$RELEASE_APK" verbose
             cp "$RELEASE_APK" output_apks/verbose-ai-release.apk
-            echo "Signed and copied release APK"
+            echo "Copied release APK"
           fi
           ls -la output_apks/
 

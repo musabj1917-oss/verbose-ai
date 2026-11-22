@@ -1,21 +1,18 @@
 <?php
 require_once __DIR__ . '/../src/AuthService.php';
 $auth = AuthService::getCurrentUser();
-if (!$auth) {
-    header('Location: /login');
-    exit;
-}
 $userProfile = AuthService::getCurrentUserProfile() ?: [];
+$isGuest = empty($auth);
 $userEmail = $userProfile['email'] ?? (is_array($auth) ? ($auth['email'] ?? '') : (string)$auth);
-$userName = !empty($userProfile['name']) ? $userProfile['name'] : explode('@', $userEmail)[0];
+$userName = !empty($userProfile['name']) ? $userProfile['name'] : (!empty($userEmail) ? explode('@', $userEmail)[0] : 'Guest');
 $avatarUrl = $userProfile['avatar_url'] ?? null;
 $isUnlimited = !empty($userProfile['is_unlimited']);
 $selectedTier = $userProfile['selected_tier'] ?? 'medium';
 $creditsTotal = intval($userProfile['quota_credits_total'] ?? 1000);
 $creditsUsed = intval($userProfile['quota_credits_used'] ?? 0);
 $creditsRemaining = $isUnlimited ? 999999 : max(0, $creditsTotal - $creditsUsed);
-$currentUser = htmlspecialchars($userEmail ?: 'Reader');
-$displayName = htmlspecialchars($userName ?: 'Reader');
+$currentUser = htmlspecialchars($userEmail ?: 'Guest');
+$displayName = htmlspecialchars($userName ?: 'Guest');
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -52,22 +49,34 @@ $displayName = htmlspecialchars($userName ?: 'Reader');
     <div id="chat-history-list" class="chat-history-list"></div>
 
     <div class="sidebar-bottom">
-      <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
-        <div style="display: flex; align-items: center; gap: 8px; overflow: hidden;">
-          <?php if (!empty($avatarUrl)): ?>
-            <img src="<?= htmlspecialchars($avatarUrl) ?>" alt="Avatar" class="user-avatar" style="object-fit: cover; border-radius: 50%; width: 24px; height: 24px; border: 1px solid var(--border-medium); flex-shrink: 0;">
-          <?php else: ?>
-            <div class="user-avatar"><?= strtoupper(substr($displayName, 0, 1)) ?></div>
-          <?php endif; ?>
-          <div style="display: flex; flex-direction: column; overflow: hidden;">
-            <span style="font-family: var(--font-mono); font-size: 0.72rem; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"><?= $displayName ?></span>
-            <?php if ($isUnlimited): ?>
-              <span style="font-family: var(--font-mono); font-size: 0.6rem; color: #ffd166; font-weight: 600;">&infin; Unlimited Plan</span>
-            <?php endif; ?>
+      <?php if ($isGuest): ?>
+        <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+          <div style="display: flex; align-items: center; gap: 8px; overflow: hidden;">
+            <div class="user-avatar" style="background: rgba(255,255,255,0.06); color: var(--text-muted); font-size: 0.75rem;">G</div>
+            <span style="font-family: var(--font-mono); font-size: 0.72rem; color: var(--text-muted);">Guest Reader</span>
           </div>
+          <a href="/login" class="btn-guest-login" style="color: #60a5fa; font-size: 0.72rem; text-decoration: none; font-weight: 500; display: inline-flex; align-items: center; gap: 4px; padding: 4px 8px; background: rgba(96,165,250,0.1); border-radius: 4px; border: 1px solid rgba(96,165,250,0.25);">
+            <span>Sign In</span> &rarr;
+          </a>
         </div>
-        <a href="/logout" style="color: var(--text-dim); font-size: 0.72rem; text-decoration: none; transition: color 0.15s ease; flex-shrink: 0;" onmouseover="this.style.color='#fff'" onmouseout="this.style.color='var(--text-dim)'">Sign Out</a>
-      </div>
+      <?php else: ?>
+        <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+          <div style="display: flex; align-items: center; gap: 8px; overflow: hidden;">
+            <?php if (!empty($avatarUrl)): ?>
+              <img src="<?= htmlspecialchars($avatarUrl) ?>" alt="Avatar" class="user-avatar" style="object-fit: cover; border-radius: 50%; width: 24px; height: 24px; border: 1px solid var(--border-medium); flex-shrink: 0;">
+            <?php else: ?>
+              <div class="user-avatar"><?= strtoupper(substr($displayName, 0, 1)) ?></div>
+            <?php endif; ?>
+            <div style="display: flex; flex-direction: column; overflow: hidden;">
+              <span style="font-family: var(--font-mono); font-size: 0.72rem; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"><?= $displayName ?></span>
+              <?php if ($isUnlimited): ?>
+                <span style="font-family: var(--font-mono); font-size: 0.6rem; color: #ffd166; font-weight: 600;">&infin; Unlimited Plan</span>
+              <?php endif; ?>
+            </div>
+          </div>
+          <a href="/logout" style="color: var(--text-dim); font-size: 0.72rem; text-decoration: none; transition: color 0.15s ease; flex-shrink: 0;" onmouseover="this.style.color='#fff'" onmouseout="this.style.color='var(--text-dim)'">Sign Out</a>
+        </div>
+      <?php endif; ?>
     </div>
   </aside>
 
@@ -137,14 +146,38 @@ $displayName = htmlspecialchars($userName ?: 'Reader');
           <div class="greeting-logo-wrap">
             <img src="/img/logo.svg" class="greeting-logo" alt="Verbose AI">
           </div>
-          <h1 id="greeting-heading" class="greeting-time-title">Good morning</h1>
-          <p class="greeting-subtitle">Zero-hallucination literary intelligence across 3 AI clusters.<br>Every answer grounded in verified book text.</p>
+          <h1 id="greeting-heading" class="greeting-time-title"><?= $isGuest ? 'Verbose AI Studio' : 'Welcome back, ' . htmlspecialchars($displayName) ?></h1>
+          <p class="greeting-subtitle">Zero-hallucination literary intelligence across 3 AI clusters.<br>Every answer grounded exclusively in verified book text.</p>
+
+          <div class="starter-prompts-grid">
+            <button type="button" class="starter-prompt-card" data-prompt="Analyze the core thesis and rhetorical style across the library.">
+              <span class="starter-prompt-icon">📜</span>
+              <span class="starter-prompt-title">Analyze Core Themes</span>
+              <span class="starter-prompt-sub">Synthesize central arguments with citations</span>
+            </button>
+            <button type="button" class="starter-prompt-card" data-prompt="Scan this page photo for key quotes, OCR transcription, and contextual critique.">
+              <span class="starter-prompt-icon">📸</span>
+              <span class="starter-prompt-title">Analyze Book Photo</span>
+              <span class="starter-prompt-sub">OCR text recognition & passage analysis</span>
+            </button>
+            <button type="button" class="starter-prompt-card" data-prompt="Conduct deep Socratic cross-examination on philosophical implications.">
+              <span class="starter-prompt-icon">⚡</span>
+              <span class="starter-prompt-title">Verbose Pro Reasoning</span>
+              <span class="starter-prompt-sub">Multi-step deep thinking inference</span>
+            </button>
+            <button type="button" class="starter-prompt-card" data-prompt="Extract the top 5 pivotal citations with chapter and section references.">
+              <span class="starter-prompt-icon">🔍</span>
+              <span class="starter-prompt-title">Extract Key Citations</span>
+              <span class="starter-prompt-sub">Pinpoint exact grounded text passages</span>
+            </button>
+          </div>
+
           <div class="book-attach-hint">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
               <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
             </svg>
-            <span>Ask anything, attach a book for context, or scan a document photo</span>
+            <span>Ask anything, attach a book for context, or scan a book photo</span>
           </div>
         </div>
         <div id="messages-container" style="display: flex; flex-direction: column; gap: 28px; width: 100%;"></div>

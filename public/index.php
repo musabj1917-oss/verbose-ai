@@ -121,22 +121,8 @@ if ($uri === '/admin' || $uri === '/admin.php') {
     exit;
 }
 
-// Direct app/reader access - requires verified session
-if ($uri === '/app' || $uri === '/reader') {
-    if (!$currentUser) {
-        header('Location: /login');
-        exit;
-    }
-    require __DIR__ . '/../templates/reader.php';
-    exit;
-}
-
-// Root entrypoint: showcase landing page if unauthenticated, reader if authenticated
-if (!$currentUser) {
-    require __DIR__ . '/../templates/landing.php';
-    exit;
-}
-
-// If authenticated, render reading canvas
+// App / Reader stage (Default entrypoint for all users - authenticated or guest)
+// The native app and web root immediately open the Verbose AI discourse studio
 require __DIR__ . '/../templates/reader.php';
+exit;
 
