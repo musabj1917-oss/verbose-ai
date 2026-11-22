@@ -130,6 +130,11 @@ class BookService {
         }
     }
 
+    // Minimum cosine similarity required for a chunk to be considered relevant.
+    // Below this threshold the chunk is treated as unrelated and skipped,
+    // allowing the keyword-scoring fallback to take over instead.
+    const SIMILARITY_THRESHOLD = 0.45;
+
     private function semanticChunks($pdo, $bookId, $query) {
         try {
             $vec = Embedder::embedOne($query);
@@ -141,11 +146,19 @@ class BookService {
                 SELECT id, chapter_title AS chapter, section_number AS section, chunk_text AS text,
                        1 - (embedding <=> CAST(:q1 AS vector)) AS similarity
                 FROM book_chunks
-                WHERE book_id = :book_id AND embedding IS NOT NULL
-                ORDER BY embedding <=> CAST(:q2 AS vector)
+                WHERE book_id = :book_id
+                  AND embedding IS NOT NULL
+                  AND 1 - (embedding <=> CAST(:q2 AS vector)) > :threshold
+                ORDER BY embedding <=> CAST(:q3 AS vector)
                 LIMIT 6
             ");
-            $stmt->execute([':q1' => $literal, ':q2' => $literal, ':book_id' => $bookId]);
+            $stmt->execute([
+                ':q1'        => $literal,
+                ':q2'        => $literal,
+                ':q3'        => $literal,
+                ':book_id'   => $bookId,
+                ':threshold' => self::SIMILARITY_THRESHOLD,
+            ]);
             return $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
         } catch (Exception $e) {
             error_log("Semantic retrieval failed: " . $e->getMessage());
