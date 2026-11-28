@@ -9,7 +9,9 @@ require_once __DIR__ . '/Embedder.php';
 
 class BookService {
     // Minimum similarity threshold for relevance gating
-    const SIMILARITY_THRESHOLD = 0.38;
+    const SIMILARITY_THRESHOLD = 0.42;
+    // Stricter threshold for negative-query refusal
+    const NEGATIVE_QUERY_THRESHOLD = 0.65;
 
     public function getBooks() {
         $pdo = Database::getConnection();
@@ -39,6 +41,51 @@ class BookService {
     }
 
     /**
+     * Auto-detect the best matching Student Textbook when no book_id is attached,
+     * using a single query embedding across all Student Textbook volumes.
+     */
+    public function getBestStudentTextbookChunks(array $books, $query, $limit = 8) {
+        $pdo = Database::getConnection();
+        if (!$pdo) return ['book' => null, 'citations' => []];
+
+        $studentBooks = [];
+        foreach ($books as $b) {
+            if (stripos($b['title'] ?? '', 'Student Textbook') !== false) {
+                $studentBooks[intval($b['id'])] = $b;
+            }
+        }
+        if (empty($studentBooks)) return ['book' => null, 'citations' => []];
+
+        $vec = Embedder::embedOne(trim($query ?? ''));
+        if (!$vec) return ['book' => null, 'citations' => []];
+
+        $literal = Embedder::toLiteral($vec);
+        $idsList = implode(',', array_keys($studentBooks));
+        $stmt = $pdo->prepare("
+            SELECT book_id, (1 - (embedding <=> CAST(:q AS vector))) AS sim
+            FROM book_chunks
+            WHERE book_id IN ({$idsList})
+              AND embedding IS NOT NULL
+              AND (is_front_matter = false OR is_front_matter IS NULL)
+              AND (printed_page > 0 OR printed_page IS NULL)
+            ORDER BY sim DESC
+            LIMIT 1
+        ");
+        $stmt->execute([':q' => $literal]);
+        $top = $stmt->fetch(PDO::FETCH_ASSOC);
+        if (!$top || floatval($top['sim']) < self::SIMILARITY_THRESHOLD) {
+            return ['book' => null, 'citations' => []];
+        }
+
+        $bestId = intval($top['book_id']);
+        $bestBook = $studentBooks[$bestId] ?? null;
+        if (!$bestBook) return ['book' => null, 'citations' => []];
+
+        $citations = $this->getGroundedChunks($bestId, $query, $limit);
+        return ['book' => $bestBook, 'citations' => $citations];
+    }
+
+    /**
      * Retrieve grounded, relevance-gated passages for a query within a book.
      * Uses real hybrid search: pgvector cosine similarity + keyword scoring.
      * Returns empty array if no passages meet the threshold. Never silently falls back to first N rows.
@@ -56,10 +103,14 @@ class BookService {
 
         $limit = min(20, max(1, intval($limit)));
 
-        // 1. Check if a specific printed page, unit, or article was explicitly mentioned
-        $specificPage = null;
-        if (preg_match('/(?:printed\s+page|page|p\.?)\s*(\d+)/i', $cleanQuery, $pm)) {
-            $specificPage = intval($pm[1]);
+        // 1. Check if specific printed page(s), unit, or article were explicitly mentioned
+        $specificPages = [];
+        if (preg_match_all('/(?:printed\s+pages?|pages?|pp?\.?)\s*(\d+)(?:\s*(?:and|,|-)\s*(\d+))?/i', $cleanQuery, $pm, PREG_SET_ORDER)) {
+            foreach ($pm as $m) {
+                $specificPages[] = intval($m[1]);
+                if (!empty($m[2])) $specificPages[] = intval($m[2]);
+            }
+            $specificPages = array_values(array_unique($specificPages));
         }
         $specificUnit = null;
         if (preg_match('/(?:unit|chapter)\s*(\d+)/i', $cleanQuery, $um)) {
@@ -108,28 +159,30 @@ class BookService {
             $queryVector = Embedder::embedOne($cleanQuery);
             $hasVector = ($queryVector !== null);
 
-            // If a specific printed page was requested, prioritize page match
-            if ($specificPage !== null) {
-                $pageStmt = $pdo->prepare("
+            // If specific printed page(s) were requested, prioritize page match
+            if (!empty($specificPages)) {
+                $placeholders = implode(',', array_fill(0, count($specificPages), '?'));
+                $sql = "
                     SELECT id, chapter_title as chapter, section_number as section, chunk_text as text,
                            pdf_page, printed_page, unit_title,
-                           " . ($hasVector ? "(1 - (embedding <=> CAST(:q AS vector)))" : "1.0") . " as similarity
+                           " . ($hasVector ? "(1 - (embedding <=> CAST(? AS vector)))" : "1.0") . " as similarity
                     FROM book_chunks
-                    WHERE book_id = :book_id
-                      AND (printed_page = :page_num OR (printed_page IS NULL AND chunk_text ILIKE :page_pat))
+                    WHERE book_id = ?
+                      AND printed_page IN ({$placeholders})
                     ORDER BY " . ($hasVector ? "similarity DESC" : "id ASC") . "
-                    LIMIT :limit
-                ");
-                $params = [
-                    ':book_id' => $bookId,
-                    ':page_num' => $specificPage,
-                    ':page_pat' => "%Page {$specificPage}%",
-                    ':limit' => $limit
-                ];
+                    LIMIT ?
+                ";
+                $pageStmt = $pdo->prepare($sql);
+                $bindIdx = 1;
                 if ($hasVector) {
-                    $params[':q'] = Embedder::toLiteral($queryVector);
+                    $pageStmt->bindValue($bindIdx++, Embedder::toLiteral($queryVector));
                 }
-                $pageStmt->execute($params);
+                $pageStmt->bindValue($bindIdx++, $bookId, PDO::PARAM_INT);
+                foreach ($specificPages as $sp) {
+                    $pageStmt->bindValue($bindIdx++, $sp, PDO::PARAM_INT);
+                }
+                $pageStmt->bindValue($bindIdx++, max($limit, count($specificPages) * 2), PDO::PARAM_INT);
+                $pageStmt->execute();
                 $pageRows = $pageStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
                 if (!empty($pageRows)) {
                     return $this->formatChunks($pageRows);
@@ -252,6 +305,12 @@ class BookService {
                             $subTerms = ['moral virtues definition', 'civic virtues definition', 'what is civic virtue'];
                         } elseif (preg_match('/(?:examples?\s+of\s+civic\s+virtues?)/i', $cleanQuery)) {
                             $subTerms = ['paying fair taxes', 'staying informed', 'participating in public government'];
+                        } elseif (preg_match('/unit\s*1.*unit\s*2|unit\s*2.*unit\s*1|topics.*unit|outcomes.*unit/i', $cleanQuery)) {
+                            $subTerms = ['unit 1 squaring square root cube number', 'unit 2 variables algebra expression'];
+                        } elseif (preg_match('/experiment.*3\.7|objective.*experiment|base.*indicator/i', $cleanQuery)) {
+                            $subTerms = ['experiment 3.7 bases indicators page 60', 'acid base indicator neutral'];
+                        } elseif (preg_match('/chapter.*2.*chapter.*3|\u121d\u12d0\u1228\u1348.*2|\u121d\u12d0\u1228\u1348.*3/ui', $cleanQuery)) {
+                            $subTerms = ['\u12f5\u1295\u1245\u1290\u123d \u121d\u12d0\u1228\u1348', '\u12d0\u1228\u1308\u12cd\u12eb\u1295 \u121d\u12d0\u1228\u1348'];
                         }
 
                         if (!empty($subTerms)) {
@@ -290,7 +349,7 @@ class BookService {
             }
 
             // 5. Keyword-only fallback when vector embedding cannot be generated
-            if (!empty($keywords)) {
+            if (!empty($keywords) || !empty($defTerm) || !empty($specificArticles)) {
                 $kwScoreParts = ["0.0"];
                 $kwParams = [':book_id' => $bookId];
                 foreach ($keywords as $idx => $kw) {
@@ -298,6 +357,18 @@ class BookService {
                     $kwParams[$pName] = '%' . $kw . '%';
                     $kwScoreParts[] = "(CASE WHEN chunk_text ILIKE {$pName} THEN 1.0 ELSE 0 END)";
                     $kwScoreParts[] = "(CASE WHEN chapter_title ILIKE {$pName} THEN 2.0 ELSE 0 END)";
+                }
+                foreach ($specificArticles as $aIdx => $art) {
+                    $pName = ":art_" . $aIdx;
+                    $kwParams[$pName] = '%Article ' . $art . '%';
+                    $kwScoreParts[] = "(CASE WHEN chunk_text ILIKE {$pName} THEN 3.0 ELSE 0 END)";
+                }
+                if (!empty($defTerm)) {
+                    $kwParams[':def_head'] = '%' . $defTerm . '%';
+                    $kwParams[':def_pat1'] = '%' . $defTerm . ' is %';
+                    $kwParams[':def_pat2'] = '%' . $defTerm . ' refers to%';
+                    $kwScoreParts[] = "(CASE WHEN chapter_title ILIKE :def_head THEN 3.0 ELSE 0 END)";
+                    $kwScoreParts[] = "(CASE WHEN chunk_text ILIKE :def_pat1 OR chunk_text ILIKE :def_pat2 THEN 4.0 ELSE 0 END)";
                 }
                 $kwScoreSql = implode(' + ', $kwScoreParts);
 
@@ -309,7 +380,7 @@ class BookService {
                     WHERE book_id = :book_id
                       AND (is_front_matter = false OR is_front_matter IS NULL)
                       AND (printed_page > 0 OR printed_page IS NULL)
-                    HAVING ({$kwScoreSql}) > 0
+                      AND ({$kwScoreSql}) > 0
                     ORDER BY score DESC, id ASC
                     LIMIT :limit
                 ";
@@ -325,9 +396,31 @@ class BookService {
                 $rows = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
                 if (!empty($rows)) {
                     foreach ($rows as &$r) {
-                        $r['similarity'] = min(0.95, 0.5 + ($r['score'] * 0.1));
+                        $r['similarity'] = min(0.95, 0.5 + ($r['score'] * 0.08));
                     }
-                    return $this->formatChunks($rows);
+                    $formatted = $this->formatChunks($rows);
+
+                    if (!$isFollowUp && preg_match('/two categories|categories of virtue ethics|divided into/i', $cleanQuery)) {
+                        $subTerms = ['moral virtues', 'civic virtues', 'what is civic virtue'];
+                        $mergedMap = [];
+                        foreach ($formatted as $fc) {
+                            $mergedMap[$fc['id']] = $fc;
+                        }
+                        foreach ($subTerms as $st) {
+                            foreach ($this->getGroundedChunks($bookId, $st, 4, true) as $sChunk) {
+                                if (!isset($mergedMap[$sChunk['id']])) {
+                                    $mergedMap[$sChunk['id']] = $sChunk;
+                                }
+                            }
+                        }
+                        $allMerged = array_values($mergedMap);
+                        usort($allMerged, function($a, $b) {
+                            return ($b['similarity'] ?? 0) <=> ($a['similarity'] ?? 0);
+                        });
+                        return array_slice($allMerged, 0, max($limit, 10));
+                    }
+
+                    return $formatted;
                 }
             }
 

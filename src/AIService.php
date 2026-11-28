@@ -902,15 +902,53 @@ CORE GROUNDING & ATTRIBUTION RULES:
             return "I could not find this in the textbook.";
         }
 
-        $primary = $citations[0];
-        $text = $primary['text'];
-        $chapter = $primary['chapter'] ?? 'Section 1';
-        $printedPage = $primary['printed_page'] ?? null;
-        $pageRef = ($printedPage !== null && $printedPage > 0) ? "Page {$printedPage}" : $chapter;
+        // Verify at least one meaningful query keyword appears in the retrieved chunks (or high semantic similarity >= 0.62)
+        $rawWords = preg_split('/[\s,\.\?!;:\(\)\[\]"\'\/\\\\]+/', mb_strtolower($query, 'UTF-8'));
+        $stop = ['what','when','where','which','who','why','how','does','did','the','this','that','these','those','and','but','for','with','about','from','into','book','textbook','according','are','was','were','give','examples','list','name','explain','define'];
+        $kws = array_values(array_filter($rawWords, function($w) use ($stop) {
+            return mb_strlen($w, 'UTF-8') >= 3 && !in_array($w, $stop);
+        }));
 
-        // Strip chunk bracket header from quoted text if present
-        $cleanText = preg_replace('/^\[.*?\]\s*/', '', $text);
+        $matchedCitations = [];
+        $minRequired = max(1, (int)ceil(count($kws) / 2));
 
-        return "According to the textbook ({$pageRef}):\n\n" . trim($cleanText);
+        // Negative-query guard: if max similarity is low and no keyword hits exist, refuse immediately
+        $maxSim = 0.0;
+        foreach ($citations as $c) { $maxSim = max($maxSim, floatval($c['similarity'] ?? 0)); }
+        if ($maxSim < 0.65 && count($kws) >= 2) {
+            $totalKwHits = 0;
+            foreach ($citations as $c) {
+                $txtL = mb_strtolower($c['text'] ?? '', 'UTF-8');
+                foreach ($kws as $kw) { if (mb_strpos($txtL, $kw) !== false) $totalKwHits++; }
+            }
+            if ($totalKwHits === 0) {
+                return "I could not find this in the textbook.";
+            }
+        }
+
+        foreach ($citations as $c) {
+            $txtLower = mb_strtolower($c['text'] ?? '', 'UTF-8');
+            $kwHits = 0;
+            foreach ($kws as $kw) {
+                if (mb_strpos($txtLower, $kw) !== false) $kwHits++;
+            }
+            if ($kwHits >= $minRequired || (empty($kws) && floatval($c['similarity'] ?? 0) >= 0.62)) {
+                $matchedCitations[] = $c;
+            }
+        }
+
+        if (empty($matchedCitations)) {
+            return "I could not find this in the textbook.";
+        }
+
+        $parts = [];
+        foreach (array_slice($matchedCitations, 0, 3) as $c) {
+            $printedPage = $c['printed_page'] ?? null;
+            $pageRef = ($printedPage !== null && $printedPage > 0) ? "Page {$printedPage}" : ($c['chapter'] ?? 'Section');
+            $cleanText = preg_replace('/^(?:Section:.*?\n)?\[.*?\]\s*/s', '', $c['text'] ?? '');
+            $parts[] = "According to the textbook ([{$pageRef}]):\n" . trim($cleanText);
+        }
+
+        return implode("\n\n", $parts);
     }
 }

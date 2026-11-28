@@ -10,7 +10,12 @@ class Database {
 
     public static function getConnection() {
         if (self::$pdo !== null) {
-            return self::$pdo;
+            try {
+                self::$pdo->query('SELECT 1');
+                return self::$pdo;
+            } catch (Exception $e) {
+                self::$pdo = null;
+            }
         }
 
         $databaseUrl = Config::get('DATABASE_URL');

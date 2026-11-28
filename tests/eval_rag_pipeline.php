@@ -44,6 +44,7 @@ function runTest($testNum, $name, callable $fn) {
     } catch (Exception $e) {
         echo "\033[31mERROR\033[0m: " . $e->getMessage() . "\n";
     }
+    usleep(1500000);
 }
 
 // --------------------------------------------------------------------------
