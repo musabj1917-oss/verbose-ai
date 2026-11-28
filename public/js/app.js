@@ -287,7 +287,16 @@ document.addEventListener('DOMContentLoaded', () => {
       updateSendButtonState();
       promptInput.style.height = 'auto';
       promptInput.style.height = Math.min(promptInput.scrollHeight, 140) + 'px';
+      window.VerboseMascot?.onTyping(promptInput.value);
     });
+  });
+
+  promptInput?.addEventListener('focus', () => {
+    window.VerboseMascot?.onFocus();
+  });
+
+  promptInput?.addEventListener('blur', () => {
+    window.VerboseMascot?.onBlur();
   });
 
   promptInput?.addEventListener('keydown', (e) => {
@@ -382,6 +391,7 @@ document.addEventListener('DOMContentLoaded', () => {
     attachedBookLabel.textContent = `Book: ${book.title}`;
     attachedBookPill.style.display = 'inline-flex';
     window.SFX?.playBlip(840, 0.05);
+    window.VerboseMascot?.onBookSelected(book.title);
   }
 
   btnRemoveBook?.addEventListener('click', (e) => {
@@ -612,6 +622,12 @@ document.addEventListener('DOMContentLoaded', () => {
     messagesContainer.appendChild(aiRow);
     scrollCanvasToBottom();
 
+    // Trigger Mascot: throws answer parcel and leaps up to the AI row
+    window.VerboseMascot?.onSend(aiRow, aiBubble, {
+      isQuestion: /[\?？]|^(what|how|why|who|when|where|which|define|explain|give|is|are|can|does|did|ስለ|ምን|ምንድን|እንዴት)/i.test(userMessageText),
+      bookTitle: bookTitle
+    });
+
     let inlineOrb = null;
     if (window.ThinkingOrb) {
       inlineOrb = window.ThinkingOrb.create(orbCanvas, {
@@ -693,6 +709,9 @@ document.addEventListener('DOMContentLoaded', () => {
       window.app3DBackground?.setState('weaving');
       await streamLineByLine(aiBubble, fullAnswer);
 
+      // Notify Mascot that answer writing is finished -> celebration & return
+      window.VerboseMascot?.onComplete(aiBubble);
+
       // Finalize message display without cursor
       aiBubble.innerHTML = formatMarkdown(fullAnswer);
       window.SFX?.playReplyChime();
@@ -721,6 +740,7 @@ document.addEventListener('DOMContentLoaded', () => {
       inlineOrb?.destroy();
       contemplationBadge.style.display = 'none';
       aiBubble.textContent = 'Error contacting Verbose AI server. Please verify your connection.';
+      window.VerboseMascot?.returnToInputDock();
     } finally {
       window.app3DBackground?.setState('idle');
       state.isGenerating = false;
@@ -857,6 +877,7 @@ document.addEventListener('DOMContentLoaded', () => {
         displayedText += chunk;
         container.innerHTML = formatMarkdown(displayedText) + '<span class="streaming-cursor"></span>';
         scrollCanvasToBottom();
+        window.VerboseMascot?.onWritingToken(container);
 
         // Optional mechanical sound tick on burst
         tickCounter++;

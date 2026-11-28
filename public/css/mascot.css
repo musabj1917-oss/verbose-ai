@@ -1,0 +1,407 @@
+/* ==========================================================================
+   Verbose AI — Interactive Book Mascot Companion ("Verby")
+   Theme: Matte Obsidian Book with Open Pages, Glossy Eyes & Living Animations
+   ========================================================================== */
+
+/* Mascot Container sitting atop the input dock */
+.verbose-mascot {
+  position: absolute;
+  top: -62px;
+  right: 28px;
+  width: 76px;
+  height: 56px;
+  z-index: 45;
+  cursor: pointer;
+  pointer-events: auto;
+  user-select: none;
+  transform-origin: bottom center;
+  transition: transform 0.28s cubic-bezier(0.175, 0.885, 0.32, 1.275), opacity 0.2s ease;
+}
+
+/* Mascot Body Wrapper */
+.mascot-body-wrap {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Main Character Sprite */
+.mascot-sprite {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  filter: drop-shadow(0 6px 12px rgba(0, 0, 0, 0.75));
+  transition: transform 0.18s ease;
+  pointer-events: none;
+}
+
+/* ─── Climbing Paws (Grips onto the input-capsule glass border) ─── */
+.mascot-paws {
+  position: absolute;
+  bottom: -4px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 48px;
+  height: 10px;
+  display: flex;
+  justify-content: space-between;
+  z-index: 10;
+  pointer-events: none;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.mascot-paw {
+  width: 12px;
+  height: 9px;
+  background: #111114;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-bottom: none;
+  border-radius: 6px 6px 2px 2px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.8);
+  position: relative;
+}
+
+.mascot-paw::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  right: 2px;
+  height: 3px;
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+}
+
+/* ─── Book Search Aura & Glowing Pages ─── */
+.mascot-book-aura {
+  position: absolute;
+  top: -14px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 68px;
+  height: 36px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.book-magic-sparkle {
+  position: absolute;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 0 8px 2px rgba(255, 255, 255, 0.85);
+  opacity: 0;
+}
+
+.book-magic-sparkle.s1 { top: 2px; left: 16px; animation: sparklePulse 1.2s infinite ease-in-out; }
+.book-magic-sparkle.s2 { top: -4px; right: 20px; animation: sparklePulse 1.5s infinite 0.4s ease-in-out; }
+.book-magic-sparkle.s3 { top: 8px; right: 10px; animation: sparklePulse 1.1s infinite 0.8s ease-in-out; }
+
+.book-floating-page {
+  position: absolute;
+  width: 10px;
+  height: 7px;
+  background: rgba(255, 255, 255, 0.9);
+  border-radius: 1px;
+  box-shadow: 0 0 6px rgba(255, 255, 255, 0.5);
+  opacity: 0;
+}
+
+.book-floating-page.p1 { top: 0; left: 24px; }
+.book-floating-page.p2 { top: -2px; right: 24px; }
+
+/* ─── Active Hand (For Reaching, Flipping & Throwing) ─── */
+.mascot-active-hand {
+  position: absolute;
+  top: 14px;
+  right: -2px;
+  width: 16px;
+  height: 16px;
+  pointer-events: none;
+  opacity: 0;
+  transform-origin: bottom left;
+  transition: opacity 0.2s ease, transform 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.hand-palm {
+  width: 14px;
+  height: 14px;
+  background: #151518;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 50%;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.6);
+}
+
+/* ─── Writing Quill / Stylus Tool ─── */
+.mascot-quill-tool {
+  position: absolute;
+  top: 10px;
+  right: -14px;
+  width: 22px;
+  height: 22px;
+  pointer-events: none;
+  opacity: 0;
+  transform: rotate(-35deg) scale(0.6);
+  transform-origin: bottom left;
+  transition: opacity 0.2s ease, transform 0.25s ease;
+  filter: drop-shadow(0 0 6px rgba(255, 255, 255, 0.5));
+}
+
+.quill-spark {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 5px;
+  height: 5px;
+  background: #ffffff;
+  border-radius: 50%;
+  box-shadow: 0 0 8px 3px rgba(255, 255, 255, 0.9);
+  opacity: 0;
+}
+
+/* ─── Playful Speech / Status Bubble ─── */
+.mascot-speech-bubble {
+  position: absolute;
+  bottom: 60px;
+  right: -10px;
+  background: rgba(18, 18, 22, 0.94);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 12px;
+  padding: 5px 10px;
+  font-family: var(--font-mono, monospace);
+  font-size: 0.65rem;
+  color: #f5f5f5;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(6px) scale(0.85);
+  transition: opacity 0.2s ease, transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.8);
+  z-index: 60;
+}
+
+.mascot-speech-bubble::after {
+  content: '';
+  position: absolute;
+  bottom: -5px;
+  right: 28px;
+  width: 8px;
+  height: 8px;
+  background: rgba(18, 18, 22, 0.94);
+  border-right: 1px solid rgba(255, 255, 255, 0.18);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.18);
+  transform: rotate(45deg);
+}
+
+.mascot-speech-bubble.visible {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+
+/* ─── Flying Thrown Citation Scroll Parcel ─── */
+.mascot-thrown-scroll {
+  position: fixed;
+  z-index: 9999;
+  pointer-events: none;
+  opacity: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transform: scale(0.6);
+  transition: opacity 0.15s ease;
+}
+
+.thrown-scroll-content {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: rgba(22, 22, 28, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  border-radius: 20px;
+  box-shadow: 0 0 20px 4px rgba(255, 255, 255, 0.35), 0 10px 25px rgba(0,0,0,0.9);
+  font-family: var(--font-mono, monospace);
+  font-size: 0.72rem;
+  color: #ffffff;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+
+.thrown-scroll-content svg {
+  stroke: #ffffff;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   MASCOT STATES & ANIMATIONS
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* State 1: Idle Climbing (perched on input capsule rim) */
+.verbose-mascot.state-idle {
+  animation: mascotPerchBreathe 4s infinite ease-in-out;
+}
+
+.verbose-mascot.state-climbing {
+  animation: mascotClimbHoist 0.65s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+}
+
+/* State 2: Active Keystroke Typing Wobble */
+.verbose-mascot.state-typing {
+  animation: mascotTypingWobble 0.28s infinite alternate ease-in-out;
+}
+
+.verbose-mascot.state-typing .mascot-paws {
+  transform: translateX(-50%) translateY(-2px);
+}
+
+/* State 3: Searching Book with Hand (when question is being asked) */
+.verbose-mascot.state-searching-book .mascot-book-aura {
+  opacity: 1;
+}
+
+.verbose-mascot.state-searching-book .book-floating-page.p1 {
+  animation: pageFlutter1 0.7s infinite alternate ease-in-out;
+}
+
+.verbose-mascot.state-searching-book .book-floating-page.p2 {
+  animation: pageFlutter2 0.8s infinite 0.2s alternate ease-in-out;
+}
+
+.verbose-mascot.state-searching-book .mascot-sprite {
+  animation: mascotBookSearchTilt 0.4s infinite alternate ease-in-out;
+}
+
+.verbose-mascot.state-searching-book .mascot-active-hand {
+  opacity: 1;
+  animation: handSearchingRummage 0.5s infinite alternate ease-in-out;
+}
+
+/* State 4: Throwing the Answer */
+.verbose-mascot.state-throwing {
+  animation: mascotThrowAction 0.45s ease-out forwards;
+}
+
+/* State 5: Jumping to Reply Section */
+.verbose-mascot.state-jumping {
+  transition: transform 0.55s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.3s ease;
+  pointer-events: none;
+}
+
+/* State 6: Writing the Reply */
+.verbose-mascot.state-writing {
+  animation: mascotWritingHover 0.4s infinite alternate ease-in-out;
+}
+
+.verbose-mascot.state-writing .mascot-paws {
+  opacity: 0;
+}
+
+.verbose-mascot.state-writing .mascot-quill-tool {
+  opacity: 1;
+  transform: rotate(0deg) scale(1);
+  animation: quillScribbleMotion 0.2s infinite alternate ease-in-out;
+}
+
+.verbose-mascot.state-writing .quill-spark {
+  animation: quillSparkBurst 0.3s infinite ease-out;
+}
+
+/* State 7: Celebrating Answer */
+.verbose-mascot.state-celebrating {
+  animation: mascotCelebrationHop 0.75s ease-in-out forwards;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   KEYFRAMES
+   ══════════════════════════════════════════════════════════════════════════ */
+
+@keyframes mascotPerchBreathe {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  50% { transform: translateY(-3px) rotate(0.8deg); }
+}
+
+@keyframes mascotClimbHoist {
+  0% { transform: translateY(32px) scale(0.9); opacity: 0.6; }
+  60% { transform: translateY(-8px) scale(1.05); opacity: 1; }
+  100% { transform: translateY(0) scale(1); opacity: 1; }
+}
+
+@keyframes mascotTypingWobble {
+  0% { transform: translateY(-2px) rotate(-1.8deg) scale(1.02); }
+  100% { transform: translateY(1px) rotate(1.8deg) scale(0.99); }
+}
+
+@keyframes mascotBookSearchTilt {
+  0% { transform: rotate(-3deg) translateY(-2px); }
+  100% { transform: rotate(2deg) translateY(0); }
+}
+
+@keyframes handSearchingRummage {
+  0% { transform: translate(-8px, -18px) rotate(-30deg); }
+  50% { transform: translate(-4px, -24px) rotate(10deg); }
+  100% { transform: translate(-10px, -20px) rotate(-20deg); }
+}
+
+@keyframes pageFlutter1 {
+  0% { opacity: 0.4; transform: translateY(4px) rotate(-10deg) scale(0.8); }
+  100% { opacity: 0.95; transform: translateY(-12px) rotate(15deg) scale(1.1); }
+}
+
+@keyframes pageFlutter2 {
+  0% { opacity: 0.3; transform: translateY(3px) rotate(15deg) scale(0.8); }
+  100% { opacity: 0.9; transform: translateY(-10px) rotate(-20deg) scale(1.05); }
+}
+
+@keyframes sparklePulse {
+  0%, 100% { opacity: 0; transform: scale(0.5); }
+  50% { opacity: 1; transform: scale(1.3); }
+}
+
+@keyframes mascotThrowAction {
+  0% { transform: rotate(-14deg) translateY(4px) scale(0.96); }
+  45% { transform: rotate(-22deg) translateY(8px) scale(0.92); }
+  75% { transform: rotate(18deg) translateY(-14px) scale(1.08); }
+  100% { transform: rotate(0deg) translateY(0) scale(1); }
+}
+
+@keyframes quillScribbleMotion {
+  0% { transform: translate(0, 0) rotate(-12deg); }
+  100% { transform: translate(4px, -3px) rotate(18deg); }
+}
+
+@keyframes quillSparkBurst {
+  0% { opacity: 0; transform: scale(0.2); }
+  50% { opacity: 1; transform: scale(1.4); }
+  100% { opacity: 0; transform: scale(0.4) translate(-4px, 4px); }
+}
+
+@keyframes mascotWritingHover {
+  0% { transform: translateY(0) rotate(-1deg); }
+  100% { transform: translateY(-4px) rotate(1deg); }
+}
+
+@keyframes mascotCelebrationHop {
+  0% { transform: scale(1); }
+  25% { transform: translateY(-18px) scale(1.1) rotate(5deg); }
+  50% { transform: translateY(0) scale(0.95); }
+  75% { transform: translateY(-10px) scale(1.05) rotate(-4deg); }
+  100% { transform: translateY(0) scale(1) rotate(0deg); }
+}
+
+/* Responsive adjustment for mobile screens */
+@media (max-width: 640px) {
+  .verbose-mascot {
+    width: 62px;
+    height: 46px;
+    top: -50px;
+    right: 14px;
+  }
+}

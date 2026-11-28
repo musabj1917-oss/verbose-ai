@@ -26,6 +26,7 @@ $displayName = htmlspecialchars($userName ?: 'Guest');
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/css/style.css">
+  <link rel="stylesheet" href="/css/mascot.css">
 </head>
 <body data-is-unlimited="<?= $isUnlimited ? '1' : '0' ?>" data-selected-tier="<?= htmlspecialchars($selectedTier) ?>">
 
@@ -290,5 +291,6 @@ $displayName = htmlspecialchars($userName ?: 'Guest');
   <script src="/js/vgpu-background.js"></script>
   <script src="/js/starfield.js"></script>
   <script src="/js/app.js"></script>
+  <script src="/js/mascot.js"></script>
 </body>
 </html>

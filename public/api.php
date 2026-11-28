@@ -468,18 +468,13 @@ if ($action === 'query' || $action === 'scan_image') {
         }
     } else {
         // If no book was explicitly attached via the UI '+' pill,
-        // intelligently check if the query matches the English student textbook
-        foreach ($books as $b) {
-            if (stripos($b['title'], 'Student Textbook (English)') !== false) {
-                $candidateCitations = $bookService->getGroundedChunks($b['id'], $query, 8);
-                if (!empty($candidateCitations)) {
-                    $activeBook = $b;
-                    $bookId = $b['id'];
-                    $citations = $candidateCitations;
-                    $bookTitle = $b['title'];
-                    break;
-                }
-            }
+        // auto-detect the best matching Student Textbook
+        $auto = $bookService->getBestStudentTextbookChunks($books, $query, 8);
+        if (!empty($auto['book']) && !empty($auto['citations'])) {
+            $activeBook = $auto['book'];
+            $bookId = $activeBook['id'];
+            $citations = $auto['citations'];
+            $bookTitle = $activeBook['title'];
         }
     }
 
