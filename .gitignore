@@ -4,3 +4,4 @@ thinking-orbs-src/
 *.log
 build-output/
 data/
+scratch/

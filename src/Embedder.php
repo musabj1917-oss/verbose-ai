@@ -1,152 +1,64 @@
 <?php
 /**
- * Verbose AI - Enterprise Multi-Provider Embedding Engine (768-dim)
+ * Verbose AI - Enterprise Gemini Embedding Engine (768-dim)
  * Matches book_chunks.embedding vector(768).
- *
- * Tier 1: OpenRouter (openai/text-embedding-3-small, openai/text-embedding-3-large, baai/bge-m3)
- *         High-throughput, enterprise rate limits, no 15 RPM throttling.
- * Tier 2: Google Gemini (text-embedding-004, gemini-embedding-2)
+ * Model: gemini-embedding-2 (multilingual, 768 dimensions).
  */
 
 require_once __DIR__ . '/Config.php';
 
 class Embedder {
     const DIMS = 768;
-    const MODEL = 'nvidia/nemotron-3.5-embed-1b:free';
-    const OPENROUTER_MODELS = [
-        'nvidia/nemotron-3.5-embed-1b:free',
-        'nvidia/nemotron-3-embed-1b:free',
-        'openai/text-embedding-3-small'
-    ];
-    const GEMINI_MODELS = [
-        'text-embedding-004',
-        'gemini-embedding-2'
-    ];
+    const MODEL = 'gemini-embedding-2';
 
     /**
-     * Embed a list of texts. Returns an array of normalized float vectors in the same order,
-     * or null if all providers fail.
+     * Embed a list of texts using Google Gemini gemini-embedding-2.
+     * Returns an array of unit-length float vectors (768-dim), or null on failure.
      */
     public static function embedBatch(array $texts) {
         if (empty($texts)) {
             return [];
         }
 
-        // Clean and prepare input texts
+        $apiKey = Config::get('GEMINI_API_KEY');
+        if (empty($apiKey)) {
+            error_log("Embedder: GEMINI_API_KEY is not configured.");
+            return null;
+        }
+
+        // Clean and prepare input texts (limit length to safe token bounds)
         $cleanTexts = [];
         foreach ($texts as $t) {
             $t = (string)$t;
             $cleanTexts[] = function_exists('mb_substr') ? mb_substr($t, 0, 8000, 'UTF-8') : substr($t, 0, 8000);
         }
 
-        // Tier 1: OpenRouter
-        $openRouterKey = Config::get('OPENROUTER_API_KEY');
-        if (!empty($openRouterKey)) {
-            $vecs = self::embedWithOpenRouter($cleanTexts, $openRouterKey);
-            if ($vecs !== null) {
-                return $vecs;
-            }
+        $requests = [];
+        foreach ($cleanTexts as $t) {
+            $requests[] = [
+                'model' => 'models/' . self::MODEL,
+                'content' => ['parts' => [['text' => $t]]],
+                'outputDimensionality' => self::DIMS,
+            ];
         }
 
-        // Tier 2: Gemini
-        $geminiKey = Config::get('GEMINI_API_KEY');
-        if (!empty($geminiKey)) {
-            $vecs = self::embedWithGemini($cleanTexts, $geminiKey);
-            if ($vecs !== null) {
-                return $vecs;
-            }
-        }
+        $payload = json_encode(['requests' => $requests], JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE);
+        $url = 'https://generativelanguage.googleapis.com/v1beta/models/' . self::MODEL . ':batchEmbedContents?key=' . urlencode($apiKey);
 
-        return null;
-    }
-
-    /**
-     * Embed batch using OpenRouter OpenAI / BGE embedding endpoints with elastic 768 dimensions
-     */
-    private static function embedWithOpenRouter(array $texts, string $apiKey) {
-        $url = 'https://openrouter.ai/api/v1/embeddings';
-
-        foreach (self::OPENROUTER_MODELS as $model) {
-            $payload = json_encode([
-                'model' => $model,
-                'input' => $texts,
-                'dimensions' => self::DIMS
-            ], JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE);
-
+        for ($attempt = 1; $attempt <= 3; $attempt++) {
             $ch = curl_init($url);
             curl_setopt_array($ch, [
                 CURLOPT_POST => true,
                 CURLOPT_RETURNTRANSFER => true,
-                CURLOPT_TIMEOUT => 30,
-                CURLOPT_HTTPHEADER => [
-                    'Content-Type: application/json; charset=utf-8',
-                    'Authorization: Bearer ' . $apiKey,
-                    'HTTP-Referer: https://verboseai.vercel.app',
-                    'X-Title: Verbose AI Embedder'
-                ],
-                CURLOPT_POSTFIELDS => $payload
-            ]);
-
-            $raw = curl_exec($ch);
-            $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-
-            if ($raw !== false && $code === 200) {
-                $data = json_decode($raw, true);
-                if (isset($data['data']) && is_array($data['data'])) {
-                    // Sort embeddings by index if present to guarantee identical order
-                    usort($data['data'], function($a, $b) {
-                        return ($a['index'] ?? 0) <=> ($b['index'] ?? 0);
-                    });
-
-                    $out = [];
-                    foreach ($data['data'] as $item) {
-                        $v = $item['embedding'] ?? null;
-                        if (!is_array($v) || count($v) !== self::DIMS) {
-                            $out = null;
-                            break;
-                        }
-                        $out[] = self::normalizeVector($v);
-                    }
-
-                    if ($out !== null && count($out) === count($texts)) {
-                        return $out;
-                    }
-                }
-            }
-        }
-
-        return null;
-    }
-
-    /**
-     * Embed batch using Google Gemini API
-     */
-    private static function embedWithGemini(array $texts, string $apiKey) {
-        foreach (self::GEMINI_MODELS as $model) {
-            $requests = [];
-            foreach ($texts as $t) {
-                $requests[] = [
-                    'model' => 'models/' . $model,
-                    'content' => ['parts' => [['text' => $t]]],
-                    'outputDimensionality' => self::DIMS,
-                ];
-            }
-
-            $payload = json_encode(['requests' => $requests], JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE);
-            $ch = curl_init('https://generativelanguage.googleapis.com/v1beta/models/' . $model . ':batchEmbedContents');
-            curl_setopt_array($ch, [
-                CURLOPT_POST => true,
-                CURLOPT_RETURNTRANSFER => true,
-                CURLOPT_TIMEOUT => 30,
-                CURLOPT_HTTPHEADER => [
-                    'Content-Type: application/json; charset=utf-8',
-                    'x-goog-api-key: ' . $apiKey
-                ],
+                CURLOPT_TIMEOUT => 25,
+                CURLOPT_HTTPHEADER => ['Content-Type: application/json; charset=utf-8'],
                 CURLOPT_POSTFIELDS => $payload,
             ]);
 
             $raw = curl_exec($ch);
             $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            $err = curl_error($ch);
+            @curl_close($ch);
 
             if ($raw !== false && $code === 200) {
                 $data = json_decode($raw, true);
@@ -161,13 +73,21 @@ class Embedder {
                         $out[] = self::normalizeVector($v);
                     }
 
-                    if ($out !== null && count($out) === count($texts)) {
+                    if ($out !== null && count($out) === count($cleanTexts)) {
                         return $out;
                     }
                 }
             }
+
+            if ($code === 429) {
+                // Rate limit: back off before retry
+                usleep(1500000 * $attempt);
+            } elseif ($attempt < 3) {
+                usleep(500000 * $attempt);
+            }
         }
 
+        error_log("Embedder failed after 3 attempts. Last HTTP code: {$code}, error: {$err}");
         return null;
     }
 

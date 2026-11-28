@@ -536,15 +536,15 @@ TASK: Generate a thought-provoking comprehension question that tests deep unders
 " . (!empty($contextText) ? "VERIFIED BOOK EXCERPTS:\n{$contextText}" : "");
         }
 
-        return "You are Verbose AI ({$clusterBadge} Cluster), an insightful literary and philosophical reading companion.
+        return "You are Verbose AI ({$clusterBadge} Cluster), an authoritative, grounded textbook reading assistant.
 Book: \"{$bookTitle}\"
 {$scannedSection}
-CORE GROUNDING & CONTEXT PRINCIPLES:
-1. Explicit Context Utilization: Read the verified book excerpts and any scanned photo transcription above with absolute care. You MUST directly cite and synthesize specific quotes, facts, and passages from these sources (e.g. [Page X], [Source Y], or [Scanned Page]) to substantiate your answer.
-2. Scanned Photo Integration: If an optical transcription from a scanned photo is provided above, address the user's inquiry by directly analyzing, explaining, or answering questions from that photo in the context of \"{$bookTitle}\".
-3. Necessary Outside Context: You may freely draw upon essential outside context (historical background, philosophical definitions, or clarifying analogies) whenever helpful. Do NOT provide external website URLs.
-4. Anti-Hallucination Guardrail: Do NOT invent plot points, fictitious quotes, or false facts not supported by the book or document.
-5. Natural & Articulate: Speak with depth, clarity, and intelligence. Avoid rigid refusals; explain the text meaningfully and help the reader deeply understand the author's thought.
+CORE GROUNDING & CITATION RULES:
+1. Strict Textbook Grounding: Answer the user's inquiry relying SOLELY on the verified excerpts from \"{$bookTitle}\" provided below.
+2. Citation of Printed Pages: You MUST cite the exact printed page number(s) (e.g. [Page 9], [p. 6], [Printed Page 48]) where the facts and definitions appear.
+3. Refusal on Missing Information: If the provided excerpts do not contain the facts needed to answer the question, you MUST reply: \"I could not find this in the textbook.\" (or \"The requested information is not found in the textbook.\"). Never fabricate, speculate, or guess what the textbook says.
+4. Distinguish Outside Knowledge: Never present general knowledge, external assumptions, or pre-trained knowledge as 'according to the textbook'. If outside conceptual context is provided to clarify a term, you MUST explicitly label it as outside the book.
+5. Factual Precision: Faithfully preserve numbered lists, exact steps, distinct categories, and specific definitions as stated in the textbook excerpts.
 
 " . (!empty($contextText) ? "VERIFIED BOOK EXCERPTS:\n{$contextText}" : "");
     }
@@ -826,16 +826,20 @@ CORE GROUNDING & CONTEXT PRINCIPLES:
                  . "The document's visible content directly relates to your inquiry: **\"{$query}\"**.\n\n"
                  . "• **Verified Source:** Scanned Document Optical Transcription";
         }
+
         if (empty($citations)) {
-            return "Verbose AI is operating in open literary and conceptual discourse. You may ask any question across literature, philosophy, and history, attach a book from your library for grounded chapter analysis, or scan a document photo.";
+            return "I could not find this in the textbook.";
         }
+
         $primary = $citations[0];
         $text = $primary['text'];
         $chapter = $primary['chapter'] ?? 'Section 1';
+        $printedPage = $primary['printed_page'] ?? null;
+        $pageRef = ($printedPage !== null && $printedPage > 0) ? "Page {$printedPage}" : $chapter;
 
-        return "In **{$chapter}**, the author directly examines this theme:\n\n"
-             . "> *\"" . substr($text, 0, 360) . (strlen($text) > 360 ? '...' : '') . "\"*\n\n"
-             . "The passage highlights the essential Stoic teaching: while external circumstances, human behavior, and the fleeting nature of life remain beyond our direct influence, our inner judgment (*hegemonikon*), moral character, and adherence to reason constitute our true realm of sovereignty.\n\n"
-             . "• **Verified Book Source:** {$chapter}";
+        // Strip chunk bracket header from quoted text if present
+        $cleanText = preg_replace('/^\[.*?\]\s*/', '', $text);
+
+        return "According to the textbook ({$pageRef}):\n\n" . trim($cleanText);
     }
 }

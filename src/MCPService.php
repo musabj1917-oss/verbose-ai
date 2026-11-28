@@ -494,48 +494,53 @@ class MCPService {
         }
 
         if ($bookId) {
-            return $this->bookService->getGroundedChunks($bookId, $query);
+            $results = $this->bookService->getGroundedChunks($bookId, $query, $limit);
+            if (empty($results)) {
+                return [
+                    'results' => [],
+                    'message' => 'No relevant passages found above the relevance threshold for this query.'
+                ];
+            }
+            return $results;
         }
 
-        // If no book_id, search across entire library with pgvector or keywords
+        // Global search across entire library with real pgvector hybrid search
         try {
             $vec = Embedder::embedOne($query);
             if ($vec) {
                 $literal = Embedder::toLiteral($vec);
                 $stmt = $pdo->prepare("
                     SELECT bc.id, b.title as book_title, bc.chapter_title as chapter,
-                           bc.chunk_text as text,
+                           bc.chunk_text as text, bc.pdf_page, bc.printed_page, bc.unit_title,
                            ROUND(CAST(1 - (bc.embedding <=> CAST(:q1 AS vector)) AS numeric), 4) as similarity
                     FROM book_chunks bc
                     JOIN books b ON bc.book_id = b.id
                     WHERE bc.embedding IS NOT NULL
-                    ORDER BY bc.embedding <=> CAST(:q2 AS vector)
+                      AND b.is_active = true
+                      AND (bc.is_front_matter = false OR bc.is_front_matter IS NULL)
+                      AND (bc.printed_page > 0 OR bc.printed_page IS NULL)
+                      AND (1 - (bc.embedding <=> CAST(:q2 AS vector))) >= 0.38
+                    ORDER BY bc.embedding <=> CAST(:q3 AS vector)
                     LIMIT :limit
                 ");
                 $stmt->bindValue(':q1', $literal);
                 $stmt->bindValue(':q2', $literal);
+                $stmt->bindValue(':q3', $literal);
                 $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
                 $stmt->execute();
-                return $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+                $rows = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+                if (!empty($rows)) {
+                    return $rows;
+                }
             }
         } catch (Exception $e) {
             error_log("Global semantic search fallback: " . $e->getMessage());
         }
 
-        // Keyword fallback
-        $stmt = $pdo->prepare("
-            SELECT bc.id, b.title as book_title, bc.chapter_title as chapter,
-                   bc.chunk_text as text, 0.85 as similarity
-            FROM book_chunks bc
-            JOIN books b ON bc.book_id = b.id
-            WHERE bc.chunk_text ILIKE :kw
-            ORDER BY bc.id ASC
-            LIMIT :limit
-        ");
-        $stmt->bindValue(':kw', '%' . $query . '%');
-        $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
-        $stmt->execute();
-        return $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        return [
+            'results' => [],
+            'message' => 'No relevant passages found above the relevance threshold for this query.'
+        ];
     }
 
     private function toolAskBook(array $args): array {
@@ -555,10 +560,32 @@ class MCPService {
                     break;
                 }
             }
+        } else {
+            // Default to Grade 8 English Student Textbook if context is unconstrained
+            $books = $this->bookService->getBooks();
+            foreach ($books as $b) {
+                if (stripos($b['title'], 'Student Textbook (English)') !== false) {
+                    $activeBook = $b;
+                    $bookId = $b['id'];
+                    break;
+                }
+            }
         }
 
-        $bookTitle = $activeBook ? $activeBook['title'] : null;
-        $citations = $activeBook ? $this->bookService->getGroundedChunks($bookId, $query) : [];
+        $bookTitle = $activeBook ? $activeBook['title'] : 'Citizenship Education Grade 8';
+        $citations = $bookId ? $this->bookService->getGroundedChunks($bookId, $query) : [];
+
+        // Strict Grounding: if no passages meet threshold, refuse immediately
+        if (empty($citations)) {
+            return [
+                'success' => true,
+                'answer' => "I could not find this in the textbook.",
+                'provider' => 'Verbose AI',
+                'book_title' => $bookTitle,
+                'citations_count' => 0,
+                'citations' => []
+            ];
+        }
 
         $res = $this->aiService->generateGroundedAnswer($query, $bookTitle, $citations, 'ask');
         return [

@@ -28,6 +28,12 @@ class Database {
             $dbname = ltrim($dbparts['path'] ?? 'verbose_db', '/');
             $user = $dbparts['user'] ?? '';
             $pass = $dbparts['pass'] ?? '';
+            // If host has -pooler, verify DNS or fallback to direct endpoint
+            if (strpos($host, '-pooler.') !== false) {
+                if (gethostbyname($host) === $host) {
+                    $host = str_replace('-pooler.', '.', $host);
+                }
+            }
             $dsn = "pgsql:host={$host};port={$port};dbname={$dbname};sslmode=require";
         }
 
