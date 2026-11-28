@@ -309,8 +309,8 @@ class BookService {
                             $subTerms = ['unit 1 squaring square root cube number', 'unit 2 variables algebra expression'];
                         } elseif (preg_match('/experiment.*3\.7|objective.*experiment|base.*indicator/i', $cleanQuery)) {
                             $subTerms = ['experiment 3.7 bases indicators page 60', 'acid base indicator neutral'];
-                        } elseif (preg_match('/chapter.*2.*chapter.*3|\u121d\u12d0\u1228\u1348.*2|\u121d\u12d0\u1228\u1348.*3/ui', $cleanQuery)) {
-                            $subTerms = ['\u12f5\u1295\u1245\u1290\u123d \u121d\u12d0\u1228\u1348', '\u12d0\u1228\u1308\u12cd\u12eb\u1295 \u121d\u12d0\u1228\u1348'];
+                        } elseif (preg_match('/chapter.*2.*chapter.*3|ምዐረፈ.*2|ምዐረፈ.*3/ui', $cleanQuery)) {
+                            $subTerms = ['ድንቅነሽ ምዐረፈ', 'ዐረገውያን ምዐረፈ'];
                         }
 
                         if (!empty($subTerms)) {
