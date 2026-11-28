@@ -25,6 +25,8 @@ with open(CHUNKS_JSON, "r", encoding="utf-8") as f:
 
 print(f"Loaded {len(chunks)} chunks to embed and ingest.")
 
+import time
+
 # 2. Embed with gemini-embedding-2 in batches of 32
 def embed_batch(texts):
     url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-2:batchEmbedContents?key={GEMINI_API_KEY}"
@@ -32,7 +34,7 @@ def embed_batch(texts):
     payload = json.dumps({"requests": reqs}).encode("utf-8")
     req = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"})
     
-    for attempt in range(1, 4):
+    for attempt in range(1, 6):
         try:
             with urllib.request.urlopen(req, timeout=30) as resp:
                 data = json.loads(resp.read().decode("utf-8"))
@@ -48,8 +50,9 @@ def embed_batch(texts):
             return out
         except Exception as e:
             print(f"  Batch embed error (attempt {attempt}): {e}")
-            if attempt == 3:
+            if attempt == 5:
                 raise e
+            time.sleep(12 * attempt)
 
 all_embeddings = []
 batch_size = 32
@@ -59,6 +62,7 @@ for i in range(0, len(chunks), batch_size):
     print(f"Embedding batch {i//batch_size + 1}/{(len(chunks)-1)//batch_size + 1} ({len(texts)} chunks)...")
     vecs = embed_batch(texts)
     all_embeddings.extend(vecs)
+    time.sleep(3)
 
 print(f"Successfully computed {len(all_embeddings)} vector embeddings (768-dim, normalized).")
 

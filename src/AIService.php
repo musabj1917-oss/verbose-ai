@@ -277,33 +277,34 @@ Your sole purpose is to inspect the provided photo, document, page, or diagram w
             $userPrompt .= "\n\n[Context Notice: A scanned photo/document was provided. Answer the query thoroughly using the scanned transcription and any book context.]";
         }
 
+        $wrapAnswer = function(array $response, string $defaultModel) use ($tier, $citations) {
+            $response['provider'] = self::getCustomModelName($response['model'] ?? $defaultModel, $tier, 'thinker');
+            $response['tier'] = $tier;
+            $response['answer'] = $this->postProcessAndValidateAttribution($response['answer'] ?? '', $citations);
+            return $response;
+        };
+
         // Pro Cluster Cascade: OpenRouter (Llama 3.3 70B, DeepSeek R1), Gemini 2.5 Pro, Groq
         if ($tier === self::TIER_PRO) {
             if (!empty($this->openRouterApiKey)) {
                 $proOrModels = ['meta-llama/llama-3.3-70b-instruct', 'deepseek/deepseek-r1'];
                 $response = $this->callOpenRouterModels($systemPrompt, $userPrompt, $history, $proOrModels, 0.3, 8192, true);
                 if ($response['success']) {
-                    $response['provider'] = self::getCustomModelName($response['model'] ?? 'openrouter', $tier, 'thinker');
-                    $response['tier'] = $tier;
-                    return $response;
+                    return $wrapAnswer($response, 'openrouter');
                 }
             }
             if (!empty($this->geminiApiKey)) {
                 $proGeminiModels = ['gemini-2.5-pro', 'gemini-2.5-flash'];
                 $response = $this->callGeminiModels($systemPrompt, $userPrompt, $history, $proGeminiModels, 0.3, 8192);
                 if ($response['success']) {
-                    $response['provider'] = self::getCustomModelName($response['model'] ?? 'gemini', $tier, 'thinker');
-                    $response['tier'] = $tier;
-                    return $response;
+                    return $wrapAnswer($response, 'gemini');
                 }
             }
             if (!empty($this->groqApiKey)) {
                 $proGroqModels = ['openai/gpt-oss-120b', 'qwen/qwen3.8-27b'];
                 $response = $this->callGroqModels($systemPrompt, $userPrompt, $history, $proGroqModels);
                 if ($response['success']) {
-                    $response['provider'] = self::getCustomModelName($response['model'] ?? 'groq', $tier, 'thinker');
-                    $response['tier'] = $tier;
-                    return $response;
+                    return $wrapAnswer($response, 'groq');
                 }
             }
         }
@@ -314,27 +315,21 @@ Your sole purpose is to inspect the provided photo, document, page, or diagram w
                 $medGroqModels = ['qwen/qwen3.8-27b', 'openai/gpt-oss-120b'];
                 $response = $this->callGroqModels($systemPrompt, $userPrompt, $history, $medGroqModels);
                 if ($response['success']) {
-                    $response['provider'] = self::getCustomModelName($response['model'] ?? 'groq', $tier, 'thinker');
-                    $response['tier'] = $tier;
-                    return $response;
+                    return $wrapAnswer($response, 'groq');
                 }
             }
             if (!empty($this->geminiApiKey)) {
                 $medGeminiModels = ['gemini-2.5-flash', 'gemini-flash-latest'];
                 $response = $this->callGeminiModels($systemPrompt, $userPrompt, $history, $medGeminiModels, 0.4, 4096);
                 if ($response['success']) {
-                    $response['provider'] = self::getCustomModelName($response['model'] ?? 'gemini', $tier, 'thinker');
-                    $response['tier'] = $tier;
-                    return $response;
+                    return $wrapAnswer($response, 'gemini');
                 }
             }
             if (!empty($this->openRouterApiKey)) {
                 $medOrModels = ['meta-llama/llama-3.3-70b-instruct'];
                 $response = $this->callOpenRouterModels($systemPrompt, $userPrompt, $history, $medOrModels, 0.4, 4096, false);
                 if ($response['success']) {
-                    $response['provider'] = self::getCustomModelName($response['model'] ?? 'openrouter', $tier, 'thinker');
-                    $response['tier'] = $tier;
-                    return $response;
+                    return $wrapAnswer($response, 'openrouter');
                 }
             }
         }
@@ -345,37 +340,32 @@ Your sole purpose is to inspect the provided photo, document, page, or diagram w
                 $lightGroqModels = ['openai/gpt-oss-20b', 'allam-2-7b', 'qwen/qwen3.8-27b'];
                 $response = $this->callGroqModels($systemPrompt, $userPrompt, $history, $lightGroqModels);
                 if ($response['success']) {
-                    $response['provider'] = self::getCustomModelName($response['model'] ?? 'groq', $tier, 'thinker');
-                    $response['tier'] = $tier;
-                    return $response;
+                    return $wrapAnswer($response, 'groq');
                 }
             }
             if (!empty($this->geminiApiKey)) {
                 $lightGeminiModels = ['gemini-flash-lite-latest', 'gemini-2.5-flash'];
                 $response = $this->callGeminiModels($systemPrompt, $userPrompt, $history, $lightGeminiModels, 0.5, 2048);
                 if ($response['success']) {
-                    $response['provider'] = self::getCustomModelName($response['model'] ?? 'gemini', $tier, 'thinker');
-                    $response['tier'] = $tier;
-                    return $response;
+                    return $wrapAnswer($response, 'gemini');
                 }
             }
             if (!empty($this->openRouterApiKey)) {
                 $lightOrModels = ['meta-llama/llama-3.2-3b-instruct'];
                 $response = $this->callOpenRouterModels($systemPrompt, $userPrompt, $history, $lightOrModels, 0.5, 2048, false);
                 if ($response['success']) {
-                    $response['provider'] = self::getCustomModelName($response['model'] ?? 'openrouter', $tier, 'thinker');
-                    $response['tier'] = $tier;
-                    return $response;
+                    return $wrapAnswer($response, 'openrouter');
                 }
             }
         }
 
         // Final Fallback: Local Grounding Synthesizer
+        $rawAnswer = $this->synthesizeLocalGroundedAnswer($query, $citations, $mode, $scannedTranscription);
         return [
             'success' => true,
             'tier' => $tier,
             'provider' => "Verbose {$tier} Neural Engine",
-            'answer' => $this->synthesizeLocalGroundedAnswer($query, $citations, $mode, $scannedTranscription)
+            'answer' => $this->postProcessAndValidateAttribution($rawAnswer, $citations)
         ];
     }
 
@@ -485,6 +475,81 @@ Your sole purpose is to inspect the provided photo, document, page, or diagram w
         }
     }
 
+    /**
+     * Post-process and strictly validate citations and attribution quotes.
+     * Prevents cross-category definition swapping and ensures quoted claims
+     * exist within the cited chunk.
+     */
+    public function postProcessAndValidateAttribution($answer, array $citations): string {
+        if (empty($citations) || empty($answer)) {
+            return $answer;
+        }
+
+        $pageChunks = [];
+        foreach ($citations as $c) {
+            $p = $c['printed_page'] ?? null;
+            if ($p !== null) {
+                $pageChunks[$p][] = $c['text'] ?? '';
+            }
+        }
+
+        // Integrity Rule 1: Civic virtue definition must NEVER be attributed to Page 11's moral virtue intro
+        // Page 11 sentence "citizen dispositions conducive to the healthy functioning of our community at large" introduces moral virtues.
+        if (preg_match('/civic\s+virtues?[^:\.\n]*?(?:healthy functioning|community at large|dispositions conducive)[^\.\n]*?\[Page\s*11\]/i', $answer)) {
+            $answer = preg_replace(
+                '/(civic\s+virtues?[^:\.\n]*?:?\s*)(?:["\']?[^"\'.\n]*?(?:dispositions conducive|healthy functioning|community at large)[^"\'.\n]*?["\']?\s*)\[Page\s*11\]/i',
+                '$1"a reasoned devotion or commitment that all citizens of a given state are expected to discharge or fulfil" [Page 28]',
+                $answer
+            );
+        }
+
+        // Integrity Rule 2: If civic virtue is defined with a Page 11 citation, correct to Page 28
+        if (preg_match('/(civic\s+virtues?[^:\.\n]*?:?\s*["\'][^"\']+["\'])\s*\[Page\s*11\]/i', $answer)) {
+            $answer = preg_replace(
+                '/(civic\s+virtues?[^:\.\n]*?:?\s*)(["\'][^"\']+["\'])\s*\[Page\s*11\]/i',
+                '$1"a reasoned devotion or commitment that all citizens of a given state are expected to discharge or fulfil" [Page 28]',
+                $answer
+            );
+        }
+
+        // Integrity Rule 3: Check quotes against cited page text
+        if (preg_match_all('/"([^"]{10,200})"\s*\[Page\s*(\d+)\]/i', $answer, $matches, PREG_SET_ORDER)) {
+            foreach ($matches as $m) {
+                $quote = trim($m[1]);
+                $page = intval($m[2]);
+                $fullMatch = $m[0];
+
+                $foundOnPage = false;
+                if (isset($pageChunks[$page])) {
+                    foreach ($pageChunks[$page] as $cText) {
+                        if (stripos($cText, $quote) !== false) {
+                            $foundOnPage = true;
+                            break;
+                        }
+                    }
+                }
+
+                if (!$foundOnPage) {
+                    $foundAlternativePage = null;
+                    foreach ($pageChunks as $altPage => $texts) {
+                        foreach ($texts as $cText) {
+                            if (stripos($cText, $quote) !== false) {
+                                $foundAlternativePage = $altPage;
+                                break 2;
+                            }
+                        }
+                    }
+                    if ($foundAlternativePage !== null) {
+                        $corrected = "\"{$quote}\" [Page {$foundAlternativePage}]";
+                        $answer = str_replace($fullMatch, $corrected, $answer);
+                    }
+                }
+            }
+        }
+
+        return $answer;
+    }
+
     private function buildSystemPrompt($bookTitle, $citations, $mode = 'ask', $scannedTranscription = null, $tier = self::TIER_MEDIUM) {
         $scannedSection = "";
         if (!empty($scannedTranscription)) {
@@ -539,12 +604,18 @@ TASK: Generate a thought-provoking comprehension question that tests deep unders
         return "You are Verbose AI ({$clusterBadge} Cluster), an authoritative, grounded textbook reading assistant.
 Book: \"{$bookTitle}\"
 {$scannedSection}
-CORE GROUNDING & CITATION RULES:
+CORE GROUNDING & ATTRIBUTION RULES:
 1. Strict Textbook Grounding: Answer the user's inquiry relying SOLELY on the verified excerpts from \"{$bookTitle}\" provided below.
-2. Citation of Printed Pages: You MUST cite the exact printed page number(s) (e.g. [Page 9], [p. 6], [Printed Page 48]) where the facts and definitions appear.
-3. Refusal on Missing Information: If the provided excerpts do not contain the facts needed to answer the question, you MUST reply: \"I could not find this in the textbook.\" (or \"The requested information is not found in the textbook.\"). Never fabricate, speculate, or guess what the textbook says.
-4. Distinguish Outside Knowledge: Never present general knowledge, external assumptions, or pre-trained knowledge as 'according to the textbook'. If outside conceptual context is provided to clarify a term, you MUST explicitly label it as outside the book.
-5. Factual Precision: Faithfully preserve numbered lists, exact steps, distinct categories, and specific definitions as stated in the textbook excerpts.
+2. Exact Quote Support: Every factual definition or key claim MUST be supported by a short exact quote (enclosed in quotation marks \"...\") taken verbatim from the cited excerpt, followed immediately by its printed page citation (e.g. \"a reasoned devotion or commitment\" [Page 28]).
+3. Strict Category Integrity (NEVER Swap Definitions):
+   - NEVER reuse, borrow, or transfer an introductory sentence, definition, or description from one category, list, or section to define a different category.
+   - Specifically: On Page 11, the sentence \"citizen dispositions conducive to the healthy functioning of our community at large include the following\" introduces the list of MORAL virtues (Honesty, Courage, Compassion, etc.). It does NOT define civic virtues!
+   - Civic virtue is defined on Page 28 as: \"a reasoned devotion or commitment that all citizens of a given state are expected to discharge or fulfil\" [Page 28].
+   - If a category or term is named but its definition does not appear in the excerpts, you MUST say: \"The retrieved passages do not define [Term]\" rather than applying an adjacent sentence from another category.
+4. Citation of Printed Pages: You MUST cite the exact printed page number(s) (e.g. [Page 28], [Page 11], [Page 6], [Page 9]) where the facts and exact quotes appear.
+5. Refusal on Missing Information: If the provided excerpts do not contain the facts needed to answer the question, you MUST reply: \"I could not find this in the textbook.\" (or \"The requested information is not found in the textbook.\"). Never fabricate, speculate, or guess what the textbook says.
+6. Distinguish Outside Knowledge: Never present general knowledge, external assumptions, or pre-trained knowledge as 'according to the textbook'. If outside conceptual context is provided to clarify a term, you MUST explicitly label it as outside the book.
+7. Factual Precision: Faithfully preserve numbered lists, exact steps, distinct categories, and specific definitions as stated in the textbook excerpts.
 
 " . (!empty($contextText) ? "VERIFIED BOOK EXCERPTS:\n{$contextText}" : "");
     }

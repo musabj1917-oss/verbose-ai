@@ -2,23 +2,6 @@
 import json
 import os
 import re
-import math
-import urllib.request
-import subprocess
-
-# 1. Load config
-env_vars = {}
-with open("/data/data/com.termux/files/home/verbose/.env") as f:
-    for line in f:
-        line = line.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        k, v = line.split("=", 1)
-        env_vars[k.strip()] = v.strip().strip("'\"")
-
-GEMINI_API_KEY = env_vars.get("GEMINI_API_KEY")
-if not GEMINI_API_KEY:
-    raise ValueError("GEMINI_API_KEY not found in .env")
 
 RAW_OCR_PATH = "/data/data/com.termux/files/home/verbose/data/citizenship_g8_english_raw_ocr.json"
 if not os.path.exists(RAW_OCR_PATH):
@@ -46,47 +29,114 @@ def clean_text(raw):
 
 def get_unit_and_heading(printed_p, text):
     if printed_p <= 0:
-        return "Front Matter", "Cover, Title & Table of Contents"
-    elif printed_p <= 43:
+        return "Front Matter", "Cover, Title & Table of Contents", 0
+
+    if printed_p <= 43:
         unit = "Unit 1: Virtue Ethics"
+        if printed_p in [1, 2]:
+            return unit, "1.1. Introduction to Moral and Citizenship Education", 1
+        elif printed_p == 3:
+            return unit, "Unit 1: Virtue Ethics Overview & Outcomes", 1
+        elif printed_p in [4, 5]:
+            return unit, "1.1. The concept of virtue ethics", 1
+        elif printed_p in [6, 7]:
+            return unit, "1.1. Character-Based Approach to Morality & Nature of Moral Virtue", 1
+        elif printed_p == 8:
+            return unit, "1.1.1. Ethics and virtue ethics (Aristotle & Greek Thinkers)", 1
+        elif printed_p == 9:
+            return unit, "1.1.1. Steps in Ethical Decision Making", 1
+        elif printed_p == 10:
+            return unit, "1.2. The qualities and principles of virtue ethics", 1
+        elif printed_p == 11:
+            return unit, "1.2. Categories of Virtue Ethics: Moral Virtues and Civic Virtues", 1
+        elif printed_p in [12, 13, 14]:
+            return unit, "1.2.1. Moral virtues: Honesty", 1
+        elif printed_p in [15, 16]:
+            return unit, "1.2.2. Moral virtues: Courage", 1
+        elif printed_p in [17, 18]:
+            return unit, "1.2.3. Moral virtues: Compassion", 1
+        elif printed_p in [19, 20]:
+            return unit, "1.2.4. Moral virtues: Generosity", 1
+        elif printed_p in [21, 22]:
+            return unit, "1.2.5. Moral virtues: Fairness", 1
+        elif printed_p in [23, 24]:
+            return unit, "1.2.6. Moral virtues: Self-Discipline", 1
+        elif printed_p in [25, 26, 27]:
+            return unit, "1.2.7. Moral virtues: Prudence", 1
+        elif printed_p == 28:
+            return unit, "1.2.8. Civic virtues (Definition and Meaning)", 1
+        elif printed_p == 29:
+            return unit, "1.2.8. Civic virtues (Manifestations: 1. Paying Fair Taxes)", 1
+        elif printed_p == 30:
+            return unit, "1.2.8. Civic virtues (Manifestations: 2. Staying informed)", 1
+        elif printed_p == 31:
+            return unit, "1.2.8. Civic virtues (Manifestations: 3. Participating in public government)", 1
+        elif printed_p in [32, 33]:
+            return unit, "1.3. Importance of virtue ethics", 1
+        elif printed_p in [34, 35, 36, 37]:
+            return unit, "1.4. Virtue ethics in daily life", 1
+        elif printed_p == 38:
+            return unit, "Unit 1 Summary", 1
+        elif printed_p == 39:
+            return unit, "Unit 1 Glossary", 1
+        else:
+            return unit, "Unit 1 Review Questions", 1
+
     elif printed_p <= 85:
         unit = "Unit 2: State and Government"
+        if printed_p == 44:
+            return unit, "Unit 2 Overview & Outcomes", 2
+        elif printed_p in [45, 46]:
+            return unit, "2.1. State structures", 2
+        elif printed_p in [47, 48, 49, 50, 51]:
+            return unit, "2.1.1. Unitary state structure (Powers, Functions & Limitations)", 2
+        elif printed_p in [52, 53, 54, 55, 56, 57, 58]:
+            return unit, "2.1.2. Federal state structure & FDRE Constitution (Article 51 & 52)", 2
+        elif printed_p in [59, 60]:
+            return unit, "2.1.3. Confederation (Confederal arrangement & EU example)", 2
+        elif printed_p == 61:
+            return unit, "2.2. Systems of government", 2
+        elif printed_p in [62, 63, 64, 65]:
+            return unit, "2.2.1. Parliamentary system of government (Article 74/2 & Removal)", 2
+        elif printed_p in [66, 67, 68, 69]:
+            return unit, "2.2.2. Presidential systems of government (Impeachment & Separation of Powers)", 2
+        elif printed_p in [70, 71, 72]:
+            return unit, "2.3. The Montevideo Convention & State vs Government Differences", 2
+        elif printed_p in [73, 74, 75, 76]:
+            return unit, "2.4. Forms of government in Ethiopia", 2
+        elif printed_p in [77, 78, 79, 80]:
+            return unit, "2.4.1. Strengths and limitations of different forms of government in Ethiopia", 2
+        elif printed_p == 81:
+            return unit, "Unit 2 Summary", 2
+        elif printed_p == 82:
+            return unit, "Unit 2 Glossary", 2
+        else:
+            return unit, "Unit 2 Review Questions", 2
+
     elif printed_p <= 119:
         unit = "Unit 3: Democracy"
+        if printed_p == 86:
+            return unit, "Unit 3 Overview & Outcomes", 3
+        elif printed_p in [87, 88, 89, 90]:
+            return unit, "3.1. The concept of democracy (Rules, Monitors & Misconceptions)", 3
+        elif printed_p in [91, 92, 93, 94, 95, 96, 97, 98, 99]:
+            return unit, "3.2. Fundamental Principles of democracy (Popular Sovereignty, Supremacy, Separation of Power, Secularism Art 11, Elections)", 3
+        elif printed_p in [100, 101, 102, 103, 104, 105, 106, 107]:
+            return unit, "3.3. Values of Democracy", 3
+        elif printed_p in [108, 109, 110]:
+            return unit, "3.4. Indigenous democratic values and institutions (Gada, Luwa, Awassiya, Kanchi, Seera, Yajoka)", 3
+        elif printed_p in [111, 112, 113, 114]:
+            return unit, "3.5. The challenges and opportunities of democracy in Ethiopia", 3
+        elif printed_p == 115:
+            return unit, "Unit 3 Summary", 3
+        elif printed_p == 116:
+            return unit, "Unit 3 Glossary", 3
+        else:
+            return unit, "Unit 3 Review Questions", 3
+
     else:
         unit = "Unit 4: Constitutionalism"
-
-    # Specific section detection based on printed page and content
-    heading = None
-    if printed_p == 1:
-        heading = "Introduction to Moral and Citizenship Education"
-    elif printed_p in [6, 7]:
-        heading = "Character-Based Approach to Morality & Nature of Moral Virtue"
-    elif printed_p == 8:
-        heading = "Ethics and Virtue Ethics (Aristotle & Greek Thinkers)"
-    elif printed_p == 9:
-        heading = "Steps in Ethical Decision Making"
-    elif printed_p in [11, 12]:
-        heading = "Categories of Virtue Ethics: Moral and Civic Virtues"
-    elif printed_p in [47, 48]:
-        heading = "Unitary State Structure (Powers, Functions & Limitations)"
-    elif printed_p in [52, 53, 54]:
-        heading = "Federal State Structure & FDRE Constitution (Article 51 & 52)"
-    elif printed_p in [70, 71, 72]:
-        heading = "The Montevideo Convention: Four Components of a State"
-    elif printed_p in [108, 109, 110]:
-        heading = "Indigenous Democratic Institutions (Gada, Luwa, Awassiya, Kanchi)"
-    else:
-        # Check first non-empty lines for prominent headings
-        for line in text.split("\n")[:3]:
-            l = line.strip()
-            if re.match(r"^[0-9]\.[0-9].*", l) or re.match(r"^(Activity|Keywords|Summary|Case study|Remember)\b", l, re.I):
-                heading = l
-                break
-        if not heading:
-            heading = f"Section (Printed Page {printed_p})"
-
-    return unit, heading
+        return unit, "4.1. The meaning of constitution and constitutionalism", 4
 
 chunks = []
 total_pages = len(pages_raw)
@@ -104,11 +154,10 @@ for p_num in range(1, total_pages + 1):
 
     printed_p = p_num - 7
     is_front = (p_num <= 7)
-    unit_title, section_heading = get_unit_and_heading(printed_p, cleaned)
+    unit_title, section_heading, sec_num = get_unit_and_heading(printed_p, cleaned)
 
-    # If front matter, single chunk per page
     if is_front:
-        header_tag = f"[Front Matter | PDF Page {p_num}]\n"
+        header_tag = f"Section: Front Matter\n[Front Matter | PDF Page {p_num}]\n\n"
         chunks.append({
             "pdf_page": p_num,
             "printed_page": printed_p,
@@ -122,14 +171,13 @@ for p_num in range(1, total_pages + 1):
 
     # Split page into paragraphs
     paragraphs = [p.strip() for p in cleaned.split("\n\n") if p.strip()]
-
-    # If the page contains a numbered list (e.g. 1. ... 2. ... 3. ...), keep it together!
     has_numbered_list = bool(re.search(r"\n1\.\s+[^\n]+\n2\.\s+", cleaned) or re.match(r"^1\.\s+", cleaned))
-    
-    # Target chunk length: ~1200 - 1800 chars (approx 300-450 tokens)
-    # If the whole page text is under 1800 chars or has a numbered list / remember box, keep as 1 chunk!
+
+    # Prepend Section Heading and Unit/Page metadata directly to chunk text
+    # so every chunk explicitly carries its section number and title in embeddings and text search
+    header_tag = f"Section: {section_heading}\n[{unit_title} | Printed Page {printed_p} (PDF p. {p_num}) | {section_heading}]\n\n"
+
     if len(cleaned) <= 1800 or has_numbered_list:
-        header_tag = f"[{unit_title} | Printed Page {printed_p} (PDF p. {p_num}) | {section_heading}]\n"
         chunks.append({
             "pdf_page": p_num,
             "printed_page": printed_p,
@@ -140,12 +188,11 @@ for p_num in range(1, total_pages + 1):
             "is_front_matter": False
         })
     else:
-        # Split into 2 chunks with small overlap
         mid = len(paragraphs) // 2
         p1 = "\n\n".join(paragraphs[:mid+1])
         p2 = "\n\n".join(paragraphs[mid:])
 
-        header_tag1 = f"[{unit_title} | Printed Page {printed_p} (PDF p. {p_num}) | {section_heading} (Part 1)]\n"
+        header_tag1 = f"Section: {section_heading} (Part 1)\n[{unit_title} | Printed Page {printed_p} (PDF p. {p_num}) | {section_heading} (Part 1)]\n\n"
         chunks.append({
             "pdf_page": p_num,
             "printed_page": printed_p,
@@ -156,7 +203,7 @@ for p_num in range(1, total_pages + 1):
             "is_front_matter": False
         })
 
-        header_tag2 = f"[{unit_title} | Printed Page {printed_p} (PDF p. {p_num}) | {section_heading} (Part 2)]\n"
+        header_tag2 = f"Section: {section_heading} (Part 2)\n[{unit_title} | Printed Page {printed_p} (PDF p. {p_num}) | {section_heading} (Part 2)]\n\n"
         chunks.append({
             "pdf_page": p_num,
             "printed_page": printed_p,
@@ -169,7 +216,6 @@ for p_num in range(1, total_pages + 1):
 
 print(f"Generated {len(chunks)} semantic chunks ({sum(1 for c in chunks if not c['is_front_matter'])} core textbook chunks).")
 
-# Save chunks to json
 CHUNKS_JSON = "/data/data/com.termux/files/home/verbose/data/citizenship_g8_english_chunks.json"
 with open(CHUNKS_JSON, "w", encoding="utf-8") as f:
     json.dump(chunks, f, ensure_ascii=False, indent=2)

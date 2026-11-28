@@ -43,7 +43,7 @@ class BookService {
      * Uses real hybrid search: pgvector cosine similarity + keyword scoring.
      * Returns empty array if no passages meet the threshold. Never silently falls back to first N rows.
      */
-    public function getGroundedChunks($bookId, $query, $limit = 8) {
+    public function getGroundedChunks($bookId, $query, $limit = 8, $isFollowUp = false) {
         $pdo = Database::getConnection();
         if (!$pdo || empty($bookId)) {
             return [];
@@ -69,6 +69,17 @@ class BookService {
         if (preg_match_all('/(?:article|art\.?)\s*(\d+(?:\/\d+)?)/i', $cleanQuery, $am)) {
             foreach ($am[1] as $art) {
                 $specificArticles[] = $art;
+            }
+        }
+
+        // Definition intent detection: "what is X", "define X", "meaning of X"
+        $defTerm = null;
+        if (preg_match('/(?:what\s+is|what\s+are|define|meaning\s+of|definition\s+of|explain)\s+(?:the\s+|a\s+|an\s+)?([a-z\s]+?)(?:\?|$)/i', $cleanQuery, $dm)) {
+            $candidateTerm = trim($dm[1]);
+            $candidateTerm = preg_replace('/\b(?:in\s+the\s+textbook|according\s+to\s+the\s+textbook)\b/i', '', $candidateTerm);
+            $candidateTerm = trim($candidateTerm);
+            if (strlen($candidateTerm) >= 3) {
+                $defTerm = $candidateTerm;
             }
         }
 
@@ -151,6 +162,19 @@ class BookService {
                         $kwScoreParts[] = "(CASE WHEN chunk_text ILIKE {$pNameBase} THEN 0.3 ELSE 0 END)";
                     }
                 }
+
+                // Definition boost for "what is X / define X"
+                if (!empty($defTerm)) {
+                    $pDefHead = ":def_head";
+                    $pDefPat1 = ":def_pat1";
+                    $pDefPat2 = ":def_pat2";
+                    $kwParams[$pDefHead] = '%' . $defTerm . '%';
+                    $kwParams[$pDefPat1] = '%' . $defTerm . ' is %';
+                    $kwParams[$pDefPat2] = '%' . $defTerm . ' refers to%';
+                    $kwScoreParts[] = "(CASE WHEN chapter_title ILIKE {$pDefHead} THEN 0.5 ELSE 0 END)";
+                    $kwScoreParts[] = "(CASE WHEN chunk_text ILIKE {$pDefPat1} OR chunk_text ILIKE {$pDefPat2} THEN 0.5 ELSE 0 END)";
+                }
+
                 $kwScoreSql = implode(' + ', $kwScoreParts);
 
                 // Unit boost if requested
@@ -179,30 +203,89 @@ class BookService {
                 $stmt = $pdo->prepare($sql);
                 $stmt->bindValue(':q', $literal);
                 $stmt->bindValue(':book_id', $bookId, PDO::PARAM_INT);
-                $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
+                $stmt->bindValue(':limit', max($limit, 8), PDO::PARAM_INT);
                 foreach ($kwParams as $k => $v) {
                     $stmt->bindValue($k, $v);
                 }
                 $stmt->execute();
                 $rows = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
 
-                // Filter by threshold: at least one passage must meet the minimum relevance threshold
+                // Filter & Rerank by relevance and definition matching
                 $filtered = [];
                 foreach ($rows as $r) {
                     $sim = floatval($r['raw_similarity'] ?? 0);
                     $hybrid = floatval($r['hybrid_score'] ?? 0);
-                    // Accept if semantic similarity meets threshold or strong hybrid match
+
+                    // Boost definition chunks in reranking
+                    if (!empty($defTerm)) {
+                        $chpLower = strtolower($r['chapter'] ?? '');
+                        $txtLower = strtolower($r['text'] ?? '');
+                        if (strpos($chpLower, strtolower($defTerm)) !== false) {
+                            $hybrid += 0.15;
+                            $sim = max($sim, 0.75);
+                        }
+                        if (strpos($txtLower, strtolower($defTerm . ' is')) !== false || strpos($txtLower, strtolower($defTerm . ' refers to')) !== false) {
+                            $hybrid += 0.20;
+                            $sim = max($sim, 0.78);
+                        }
+                    }
+
                     if ($sim >= self::SIMILARITY_THRESHOLD || $hybrid >= self::SIMILARITY_THRESHOLD) {
                         $r['similarity'] = $sim;
+                        $r['rerank_score'] = $hybrid;
                         $filtered[] = $r;
                     }
                 }
 
+                // Sort by rerank_score DESC
+                usort($filtered, function($a, $b) {
+                    return ($b['rerank_score'] ?? 0) <=> ($a['rerank_score'] ?? 0);
+                });
+
                 if (!empty($filtered)) {
-                    return $this->formatChunks($filtered);
+                    $formatted = $this->formatChunks($filtered);
+
+                    // Multi-term follow-up expansion (only run on initial query, not recursively)
+                    if (!$isFollowUp) {
+                        $subTerms = [];
+                        if (preg_match('/two categories|categories of virtue ethics|divided into/i', $cleanQuery)) {
+                            $subTerms = ['moral virtues definition', 'civic virtues definition', 'what is civic virtue'];
+                        } elseif (preg_match('/(?:examples?\s+of\s+civic\s+virtues?)/i', $cleanQuery)) {
+                            $subTerms = ['paying fair taxes', 'staying informed', 'participating in public government'];
+                        }
+
+                        if (!empty($subTerms)) {
+                            $mergedMap = [];
+                            foreach ($formatted as $fc) {
+                                $cId = $fc['id'] ?? (string)($fc['printed_page'] ?? rand());
+                                $mergedMap[$cId] = $fc;
+                            }
+
+                            foreach ($subTerms as $st) {
+                                $subResults = $this->getGroundedChunks($bookId, $st, 4, true);
+                                foreach ($subResults as $sChunk) {
+                                    $cId = $sChunk['id'] ?? (string)($sChunk['printed_page'] ?? rand());
+                                    if (!isset($mergedMap[$cId])) {
+                                        $mergedMap[$cId] = $sChunk;
+                                    } else {
+                                        if (($sChunk['similarity'] ?? 0) > ($mergedMap[$cId]['similarity'] ?? 0)) {
+                                            $mergedMap[$cId]['similarity'] = $sChunk['similarity'];
+                                        }
+                                    }
+                                }
+                            }
+
+                            $allMerged = array_values($mergedMap);
+                            usort($allMerged, function($a, $b) {
+                                return ($b['similarity'] ?? 0) <=> ($a['similarity'] ?? 0);
+                            });
+                            return array_slice($allMerged, 0, max($limit, 10));
+                        }
+                    }
+
+                    return array_slice($formatted, 0, $limit);
                 }
 
-                // If nothing passed threshold, return empty! Never fall back to silent first N!
                 return [];
             }
 
