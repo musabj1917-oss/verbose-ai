@@ -573,7 +573,7 @@ class MCPService {
         }
 
         $bookTitle = $activeBook ? $activeBook['title'] : 'Citizenship Education Grade 8';
-        $citations = $bookId ? $this->bookService->getGroundedChunks($bookId, $query) : [];
+        $citations = $bookId ? $this->bookService->getGroundedChunks($bookId, $query, 8) : [];
 
         // Strict Grounding: if no passages meet threshold, refuse immediately
         if (empty($citations)) {

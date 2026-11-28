@@ -43,7 +43,7 @@ class BookService {
      * Uses real hybrid search: pgvector cosine similarity + keyword scoring.
      * Returns empty array if no passages meet the threshold. Never silently falls back to first N rows.
      */
-    public function getGroundedChunks($bookId, $query, $limit = 5) {
+    public function getGroundedChunks($bookId, $query, $limit = 8) {
         $pdo = Database::getConnection();
         if (!$pdo || empty($bookId)) {
             return [];
@@ -54,9 +54,9 @@ class BookService {
             return [];
         }
 
-        $limit = min(15, max(1, intval($limit)));
+        $limit = min(20, max(1, intval($limit)));
 
-        // 1. Check if a specific printed page or unit was explicitly requested (e.g. "page 9", "p. 54", "unit 2")
+        // 1. Check if a specific printed page, unit, or article was explicitly mentioned
         $specificPage = null;
         if (preg_match('/(?:printed\s+page|page|p\.?)\s*(\d+)/i', $cleanQuery, $pm)) {
             $specificPage = intval($pm[1]);
@@ -64,6 +64,12 @@ class BookService {
         $specificUnit = null;
         if (preg_match('/(?:unit|chapter)\s*(\d+)/i', $cleanQuery, $um)) {
             $specificUnit = intval($um[1]);
+        }
+        $specificArticles = [];
+        if (preg_match_all('/(?:article|art\.?)\s*(\d+(?:\/\d+)?)/i', $cleanQuery, $am)) {
+            foreach ($am[1] as $art) {
+                $specificArticles[] = $art;
+            }
         }
 
         // 2. Extract meaningful search keywords (filter stopwords)
@@ -131,6 +137,19 @@ class BookService {
                     $kwParams[$pName] = '%' . $kw . '%';
                     $kwScoreParts[] = "(CASE WHEN chunk_text ILIKE {$pName} THEN 0.15 ELSE 0 END)";
                     $kwScoreParts[] = "(CASE WHEN chapter_title ILIKE {$pName} THEN 0.25 ELSE 0 END)";
+                }
+
+                // Explicit article boost (e.g. Article 11, Article 51, Article 52, Article 74/2)
+                foreach ($specificArticles as $aIdx => $art) {
+                    $pName = ":art_" . $aIdx;
+                    $kwParams[$pName] = '%Article ' . $art . '%';
+                    $kwScoreParts[] = "(CASE WHEN chunk_text ILIKE {$pName} THEN 0.4 ELSE 0 END)";
+                    if (strpos($art, '/') !== false) {
+                        $baseArt = explode('/', $art)[0];
+                        $pNameBase = ":art_b_" . $aIdx;
+                        $kwParams[$pNameBase] = '%Article ' . $baseArt . '%';
+                        $kwScoreParts[] = "(CASE WHEN chunk_text ILIKE {$pNameBase} THEN 0.3 ELSE 0 END)";
+                    }
                 }
                 $kwScoreSql = implode(' + ', $kwScoreParts);
 
