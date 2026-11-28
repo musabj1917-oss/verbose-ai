@@ -458,18 +458,33 @@ if ($action === 'query' || $action === 'scan_image') {
     }
 
     $activeBook = null;
+    $books = $bookService->getBooks();
     if (!empty($bookId)) {
-        $books = $bookService->getBooks();
         foreach ($books as $b) {
             if ($b['id'] == $bookId) {
                 $activeBook = $b;
                 break;
             }
         }
+    } else {
+        // If no book was explicitly attached via the UI '+' pill,
+        // intelligently check if the query matches the English student textbook
+        foreach ($books as $b) {
+            if (stripos($b['title'], 'Student Textbook (English)') !== false) {
+                $candidateCitations = $bookService->getGroundedChunks($b['id'], $query, 8);
+                if (!empty($candidateCitations)) {
+                    $activeBook = $b;
+                    $bookId = $b['id'];
+                    $citations = $candidateCitations;
+                    $bookTitle = $b['title'];
+                    break;
+                }
+            }
+        }
     }
 
-    $bookTitle = $activeBook ? $activeBook['title'] : null;
-    $citations = $activeBook ? $bookService->getGroundedChunks($bookId, $query) : [];
+    $bookTitle = $bookTitle ?? ($activeBook ? $activeBook['title'] : null);
+    $citations = $citations ?? ($activeBook ? $bookService->getGroundedChunks($bookId, $query, 8) : []);
 
     // Role 1: Photo Analyzer (strictly photo only, 720p cap for standard accounts)
     $scannedTranscription = null;
